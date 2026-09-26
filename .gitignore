@@ -1,0 +1,33 @@
+# Virtual Environments
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.npm
+*.tsbuildinfo
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.log
+
+# Databases & Artifacts
+*.db
+*.sqlite
+*.sqlite3
+!test_*.db
