@@ -1,0 +1,16 @@
+{
+  "endpoint": "hERG (K_v11.1 I_Kr blocker)",
+  "data_source": "TDC hERG (ChEMBL-derived binary activity, IC50<=10uM=active)",
+  "features": "ECFP4 Morgan fingerprint, 2048 bits, radius=2",
+  "model": "RandomForest (class_weight=balanced, n_estimators=300)",
+  "n_total": 655,
+  "n_positives": 451,
+  "positive_rate": 0.6885,
+  "cv_folds": 5,
+  "cv_roc_auc": 0.8627,
+  "youden_threshold": 0.6,
+  "accuracy_at_threshold": 0.7954,
+  "model_path": "/home/gaurav/Desktop/gaurav code /Paper/denovo/anudrishti/results/trained_models/herg_rf_model.pkl",
+  "fingerprints_path": "/home/gaurav/Desktop/gaurav code /Paper/denovo/anudrishti/results/trained_models/herg_fingerprints.npz",
+  "disclaimer": "hERG screen only \u2014 hypothesis generator. In vitro patch-clamp required per ICH S7B/FDA."
+}

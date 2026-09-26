@@ -1,0 +1,339 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/**
+ * ============================================================================
+ * MedGuard Clinical Design System (CDS) Tokens
+ * ============================================================================
+ * Calibrated for EHRs, hospital clinical dashboards, and safety workstations.
+ * Principles:
+ *  - Neutral-first (quiet slate/zinc surfaces, slate-900 high-legibility text)
+ *  - Single purposeful accent (clinical navy/slate #0f172a / #2563eb)
+ *  - Strict semantic triage: Red (Major/Critical), Amber (Moderate/Warning), Emerald (Adherent/Normal)
+ *  - Flat, crisp 1px borders, zero decorative glow/bubble shadows
+ *  - Strict 8px typographic & dimensional rhythm
+ * ============================================================================
+ */
+
+:root {
+  /* Typography Scale */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+
+  /* Spacing Scale (8px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Standard Corner Radius */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Neutral Base: Clinical Light Surface */
+  --bg-app: #f8fafc;        /* slate-50 */
+  --bg-surface: #ffffff;    /* pure white card */
+  --bg-subtle: #f1f5f9;     /* slate-100 */
+  --bg-muted: #e2e8f0;      /* slate-200 */
+
+  /* Borders */
+  --border-default: #e2e8f0; /* slate-200 */
+  --border-subtle: #f1f5f9;  /* slate-100 */
+  --border-strong: #cbd5e1;  /* slate-300 */
+
+  /* Text & Ink */
+  --text-primary: #0f172a;   /* slate-900 */
+  --text-secondary: #475569; /* slate-600 */
+  --text-muted: #64748b;     /* slate-500 */
+  --text-disabled: #94a3b8;  /* slate-400 */
+
+  /* Single Primary Accent (Clinical Action) */
+  --accent-primary: #0f172a;       /* Deep clinical slate */
+  --accent-primary-hover: #1e293b;
+  --accent-primary-text: #ffffff;
+  --accent-brand: #2563eb;         /* Interactive blue for active links/tabs */
+  --accent-brand-subtle: #eff6ff;
+  --accent-brand-border: #bfdbfe;
+
+  /* Strictly Semantic Status Colors (Triage Only) */
+  --status-critical-bg: #fef2f2;     /* red-50 */
+  --status-critical-border: #fecaca; /* red-200 */
+  --status-critical-text: #991b1b;   /* red-800 */
+  --status-critical-solid: #dc2626;  /* red-600 */
+
+  --status-warning-bg: #fffbeb;      /* amber-50 */
+  --status-warning-border: #fde68a;  /* amber-200 */
+  --status-warning-text: #92400e;    /* amber-800 */
+  --status-warning-solid: #d97706;   /* amber-600 */
+
+  --status-safe-bg: #f0fdf4;         /* green-50 */
+  --status-safe-border: #bbf7d0;     /* green-200 */
+  --status-safe-text: #166534;       /* green-800 */
+  --status-safe-solid: #16a34a;      /* green-600 */
+
+  --status-info-bg: #f0f9ff;         /* sky-50 */
+  --status-info-border: #bae6fd;     /* sky-200 */
+  --status-info-text: #075985;       /* sky-800 */
+  --status-info-solid: #0284c7;      /* sky-600 */
+
+  /* Standard Flat Elevation */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+}
+
+/* Dark Mode Token Overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-app: #0b0f17;
+    --bg-surface: #111827;
+    --bg-subtle: #1e293b;
+    --bg-muted: #334155;
+
+    --border-default: #1e293b;
+    --border-subtle: #192231;
+    --border-strong: #334155;
+
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-disabled: #64748b;
+
+    --accent-primary: #3b82f6;
+    --accent-primary-hover: #2563eb;
+    --accent-primary-text: #ffffff;
+    --accent-brand: #38bdf8;
+    --accent-brand-subtle: rgba(56, 189, 248, 0.1);
+    --accent-brand-border: rgba(56, 189, 248, 0.25);
+
+    --status-critical-bg: rgba(239, 68, 68, 0.12);
+    --status-critical-border: rgba(239, 68, 68, 0.3);
+    --status-critical-text: #fca5a5;
+    --status-critical-solid: #ef4444;
+
+    --status-warning-bg: rgba(245, 158, 11, 0.12);
+    --status-warning-border: rgba(245, 158, 11, 0.3);
+    --status-warning-text: #fde68a;
+    --status-warning-solid: #f59e0b;
+
+    --status-safe-bg: rgba(16, 185, 129, 0.12);
+    --status-safe-border: rgba(16, 185, 129, 0.3);
+    --status-safe-text: #86efac;
+    --status-safe-solid: #10b981;
+
+    --status-info-bg: rgba(2, 132, 199, 0.12);
+    --status-info-border: rgba(2, 132, 199, 0.3);
+    --status-info-text: #7dd3fc;
+    --status-info-solid: #0284c7;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Global Reset & Base Typography */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Standardized Flat Clinical Card */
+.clinical-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+  transition: border-color 0.15s ease;
+}
+
+.clinical-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+}
+
+/* Form Controls */
+.clinical-input, .clinical-select, .clinical-textarea {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  min-height: 38px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.clinical-input:focus, .clinical-select:focus, .clinical-textarea:focus {
+  border-color: var(--accent-brand);
+  box-shadow: 0 0 0 1px var(--accent-brand);
+}
+
+/* Standardized Buttons */
+.btn-primary {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  background: var(--accent-primary);
+  color: var(--accent-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  min-height: 36px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: background-color 0.15s ease;
+}
+
+.btn-primary:hover {
+  background: var(--accent-primary-hover);
+}
+
+.btn-secondary {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  min-height: 36px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* Monospace Clinical Tag */
+.mono-tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: -0.01em;
+}
+
+/* Clean Minimal Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-disabled);
+}
+
+/* ==========================================================================
+   Responsive Breakpoints & Touch Target Optimization
+   ========================================================================== */
+
+/* Tablet & Mobile (<1024px) */
+@media (max-width: 1024px) {
+  .app-container {
+    padding: var(--space-4) !important;
+  }
+}
+
+/* Mobile Devices (<640px) */
+@media (max-width: 640px) {
+  /* Tap target compliance: minimum 44px height */
+  .btn-primary, 
+  .btn-secondary, 
+  button, 
+  .clinical-input, 
+  .clinical-select,
+  select,
+  input[type="text"],
+  input[type="number"] {
+    min-height: 44px !important;
+  }
+
+  /* Force single-column stacking on small mobile screens */
+  .grid-responsive-2col,
+  .grid-responsive-3col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Compact navigation bar for small screens */
+  nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  nav button {
+    white-space: nowrap;
+    padding: 8px 12px !important;
+  }
+}
+
+/* ==========================================================================
+   Print & PDF Export Styles
+   ========================================================================== */
+@media print {
+  .no-print, header, nav, button {
+    display: none !important;
+  }
+
+  body, main {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #printable-doctor-summary {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+}
