@@ -239,5 +239,56 @@ def caregiver_sse_stream():
     return Response(event_stream(), mimetype="text/event-stream")
 
 
+# Copilot & OCR Services
+from services.copilot_agent import MedGuardCopilotAgent
+from services.ocr_pipeline import extract_prescription_entities, parse_image_ocr
+
+copilot_agent = MedGuardCopilotAgent(safety_engine=safety_engine)
+
+
+@app.route("/api/copilot/chat", methods=["POST"])
+def copilot_chat():
+    """Interactive neuro-symbolic copilot chat answering medication queries & checking prospective clashes."""
+    payload = request.get_json() or {}
+    message = payload.get("message", "")
+    current_regimen = payload.get("current_regimen", [])
+    
+    if not message:
+        return jsonify({"error": "Message is required"}), 400
+
+    response = copilot_agent.process_message(message, current_regimen)
+    return jsonify(response)
+
+
+@app.route("/api/rx/ocr", methods=["POST"])
+def ocr_prescription():
+    """Scrapes drug entities from text or uploaded image."""
+    if "image" in request.files:
+        image_file = request.files["image"]
+        result = parse_image_ocr(image_file.read())
+        return jsonify(result)
+
+    payload = request.get_json() or {}
+    raw_text = payload.get("raw_text", "")
+    if not raw_text:
+        return jsonify({"error": "raw_text or image file required"}), 400
+
+    result = extract_prescription_entities(raw_text)
+    return jsonify(result)
+
+
+@app.route("/api/edge/status", methods=["GET"])
+def edge_model_status():
+    """Returns status and paths of exported edge-ready models."""
+    edge_dir = Path(__file__).resolve().parent / "models" / "edge_export"
+    files = list(edge_dir.glob("*.pt")) if edge_dir.exists() else []
+    return jsonify({
+        "edge_ready": len(files) > 0,
+        "exported_models": [f.name for f in files],
+        "device_target": "CPU / Mobile / WebAssembly",
+        "latency_target_ms": "< 150ms"
+    })
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

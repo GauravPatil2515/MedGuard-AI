@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, ShieldCheck, Heart, AlertTriangle, Volume2, 
   CheckCircle2, XCircle, Clock, FileText, Lock, RefreshCw, 
-  User, Shield, Activity, Bell, Info
+  User, Shield, Activity, Bell, Info, Bot
 } from 'lucide-react';
+import CopilotChat from './CopilotChat';
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -183,6 +184,18 @@ export default function App() {
             {caregiverAlert && (
               <span style={{ background: '#f43f5e', color: '#fff', borderRadius: '50%', width: '8px', height: '8px', display: 'inline-block' }} />
             )}
+          </button>
+          <button 
+            onClick={() => setActiveTab('copilot')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+              fontWeight: '600', fontSize: '0.9rem', transition: 'all 0.2s',
+              background: activeTab === 'copilot' ? '#06b6d4' : 'transparent',
+              color: activeTab === 'copilot' ? '#ffffff' : '#94a3b8'
+            }}
+          >
+            <Bot size={18} />
+            <span>Copilot & OCR</span>
           </button>
         </div>
       </header>
@@ -546,6 +559,11 @@ export default function App() {
           </div>
 
         </div>
+      )}
+
+      {/* Persona View: MedGuard Copilot & OCR */}
+      {activeTab === 'copilot' && (
+        <CopilotChat currentRegimen={prescriptionData?.medications || []} />
       )}
 
     </div>
