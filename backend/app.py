@@ -26,6 +26,13 @@ from services.safety_engine import MultiDrugSafetyEngine
 from services.rx_parser import PRESET_PRESCRIPTIONS, parse_prescription_text
 from services.tts_service import generate_audio_base64, VERNACULAR_TRANSLATIONS
 from services.audit_trail import AuditTrailService, GENESIS_HASH
+from services.caregiver_service import (
+    init_caregiver_tables, create_patient, get_patient, create_caregiver,
+    link_caregiver, get_patient_caregivers, get_caregiver_patients,
+    create_schedule, get_patient_schedules, get_todays_schedule,
+    log_dose_event, get_adherence_summary
+)
+from services.openfda_service import cross_reference_drugs
 
 app = Flask(__name__)
 CORS(app)
@@ -34,6 +41,7 @@ CORS(app)
 DB_PATH = Path(__file__).resolve().parent / "medguard_audit.db"
 audit_service = AuditTrailService(db_path=DB_PATH)
 safety_engine = MultiDrugSafetyEngine()
+init_caregiver_tables()
 
 # Thread-safe event queue list for live caregiver SSE broadcasts
 caregiver_event_queues: List[queue.Queue] = []
@@ -54,11 +62,24 @@ def broadcast_caregiver_alert(alert_data: Dict[str, Any]):
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
+    has_herg = False
+    has_tox21 = False
+    has_clintox = False
+    has_bbbp = False
+    if safety_engine.tox_engine:
+        has_herg = safety_engine.tox_engine.herg_model is not None
+        has_tox21 = safety_engine.tox_engine.tox21_model is not None
+        has_clintox = safety_engine.tox_engine.clintox_model is not None
+        has_bbbp = safety_engine.tox_engine.bbbp_model is not None
+
     return jsonify({
         "status": "healthy",
         "service": "MedGuard AI",
         "models": {
-            "herg_rf_model": safety_engine.rf_model is not None,
+            "herg_rf_model": has_herg,
+            "tox21_gnn": has_tox21,
+            "clintox_gnn": has_clintox,
+            "bbbp_gnn": has_bbbp,
             "conformal_predictor": True,
             "audit_trail_wal": True
         }
@@ -275,6 +296,195 @@ def ocr_prescription():
 
     result = extract_prescription_entities(raw_text)
     return jsonify(result)
+
+
+# ── Caregiver & Patient Coordination Endpoints ─────────────────────────────────
+
+@app.route("/api/patients", methods=["POST"])
+def api_create_patient():
+    data = request.get_json() or {}
+    name = data.get("name")
+    if not name:
+        return jsonify({"error": "Patient name is required"}), 400
+    res = create_patient(
+        name=name,
+        age=int(data.get("age", 0)),
+        diagnosis=data.get("diagnosis", ""),
+        phone=data.get("phone", "")
+    )
+    return jsonify(res), 201
+
+
+@app.route("/api/patients/<patient_id>", methods=["GET"])
+def api_get_patient(patient_id: str):
+    res = get_patient(patient_id)
+    if not res:
+        return jsonify({"error": "Patient not found"}), 404
+    return jsonify(res)
+
+
+@app.route("/api/caregivers", methods=["POST"])
+def api_create_caregiver():
+    data = request.get_json() or {}
+    name = data.get("name")
+    phone = data.get("phone", "")
+    relation = data.get("relation", "Family")
+    if not name:
+        return jsonify({"error": "Caregiver name is required"}), 400
+    res = create_caregiver(
+        name=name,
+        phone=phone,
+        relation=relation,
+        email=data.get("email", "")
+    )
+    return jsonify(res), 201
+
+
+@app.route("/api/caregivers/link", methods=["POST"])
+def api_link_caregiver():
+    data = request.get_json() or {}
+    patient_id = data.get("patient_id")
+    caregiver_id = data.get("caregiver_id")
+    access_level = data.get("access_level", "READ")
+    if not patient_id or not caregiver_id:
+        return jsonify({"error": "patient_id and caregiver_id required"}), 400
+    res = link_caregiver(patient_id, caregiver_id, access_level)
+    return jsonify(res)
+
+
+@app.route("/api/patients/<patient_id>/caregivers", methods=["GET"])
+def api_patient_caregivers(patient_id: str):
+    res = get_patient_caregivers(patient_id)
+    return jsonify(res)
+
+
+@app.route("/api/caregivers/<caregiver_id>/patients", methods=["GET"])
+def api_caregiver_patients(caregiver_id: str):
+    res = get_caregiver_patients(caregiver_id)
+    return jsonify(res)
+
+
+# ── Medication Schedule & Adherence Endpoints ─────────────────────────────────
+
+@app.route("/api/schedules", methods=["POST"])
+def api_create_schedule():
+    data = request.get_json() or {}
+    patient_id = data.get("patient_id", "patient_mrs_kulkarni_01")
+    drug_name = data.get("drug_name")
+    if not drug_name:
+        return jsonify({"error": "drug_name is required"}), 400
+    
+    res = create_schedule(
+        patient_id=patient_id,
+        drug_name=drug_name,
+        generic_name=data.get("generic_name", drug_name),
+        dosage=data.get("dosage", "1 tab"),
+        frequency=data.get("frequency", "OD"),
+        start_date=data.get("start_date"),
+        duration_days=int(data.get("duration_days", 30)),
+        meal_timing=data.get("meal_timing", "any"),
+        notes=data.get("notes", "")
+    )
+    return jsonify(res), 201
+
+
+@app.route("/api/patients/<patient_id>/schedules", methods=["GET"])
+def api_get_patient_schedules(patient_id: str):
+    res = get_patient_schedules(patient_id)
+    return jsonify(res)
+
+
+@app.route("/api/patients/<patient_id>/schedule/today", methods=["GET"])
+def api_get_todays_schedule(patient_id: str):
+    res = get_todays_schedule(patient_id)
+    return jsonify(res)
+
+
+@app.route("/api/schedules/dose", methods=["POST"])
+def api_log_dose():
+    data = request.get_json() or {}
+    patient_id = data.get("patient_id", "patient_mrs_kulkarni_01")
+    schedule_id = data.get("schedule_id", "")
+    drug_name = data.get("drug_name", "Medication")
+    scheduled_time = data.get("scheduled_time", time.strftime("%Y-%m-%dT%H:%M:%S"))
+    status = data.get("status", "TAKEN")
+    missed_reason = data.get("missed_reason", "")
+    criticality = data.get("criticality", "MEDIUM")
+
+    event = log_dose_event(
+        patient_id=patient_id,
+        schedule_id=schedule_id,
+        drug_name=drug_name,
+        scheduled_time=scheduled_time,
+        status=status,
+        missed_reason=missed_reason
+    )
+
+    # Immutable Audit Log
+    record = audit_service.log_event(
+        action="SCHEDULED_DOSE_RECORD",
+        user_id=f"patient:{patient_id}",
+        resource_type="medication",
+        molecule_name=drug_name,
+        details={
+            "patient_id": patient_id,
+            "schedule_id": schedule_id,
+            "drug_name": drug_name,
+            "scheduled_time": scheduled_time,
+            "status": status,
+            "missed_reason": missed_reason,
+            "criticality": criticality
+        }
+    )
+
+    is_critical_miss = (status == "MISSED" and criticality.upper() in ["HIGH", "CRITICAL"])
+    if is_critical_miss:
+        broadcast_caregiver_alert({
+            "type": "CRITICAL_MISSED_DOSE_ALERT",
+            "patient_id": patient_id,
+            "drug_name": drug_name,
+            "scheduled_time": scheduled_time,
+            "criticality": criticality,
+            "timestamp": record["timestamp"],
+            "action_required": f"High risk! Patient missed scheduled dose of {drug_name}."
+        })
+
+    return jsonify({
+        **event,
+        "audit_hash": record["record_hash"],
+        "critical_alert_triggered": is_critical_miss
+    })
+
+
+@app.route("/api/patients/<patient_id>/adherence", methods=["GET"])
+def api_patient_adherence(patient_id: str):
+    days = request.args.get("days", 30, type=int)
+    summary = get_adherence_summary(patient_id, days=days)
+    return jsonify(summary)
+
+
+# ── OpenFDA Cross-Reference Endpoints ──────────────────────────────────────────
+
+from services.openfda_service import get_fda_adverse_events, get_fda_recalls, get_fda_interactions_label
+
+@app.route("/api/safety/fda/<drug_name>", methods=["GET"])
+def api_drug_fda(drug_name: str):
+    """Retrieves FDA FAERS adverse event reports, recalls, and package insert warnings."""
+    return jsonify({
+        "drug_name": drug_name,
+        "adverse_events": get_fda_adverse_events(drug_name, limit=6),
+        "recalls": get_fda_recalls(drug_name),
+        "label_interactions": get_fda_interactions_label(drug_name)
+    })
+
+
+@app.route("/api/safety/fda/crossref", methods=["POST"])
+def api_drugs_fda_crossref():
+    """Bulk cross-reference multiple medications against OpenFDA databases."""
+    data = request.get_json() or {}
+    meds = data.get("medications", [])
+    report = cross_reference_drugs(meds)
+    return jsonify(report)
 
 
 @app.route("/api/edge/status", methods=["GET"])

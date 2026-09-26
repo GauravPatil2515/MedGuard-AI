@@ -15,7 +15,10 @@ MODELS_DIR = BACKEND_DIR / "models"
 if str(MODELS_DIR) not in sys.path:
     sys.path.insert(0, str(MODELS_DIR))
 
-from dual_stream_gsat import DualStreamGSATGINE
+try:
+    from models.dual_stream_gsat import DualStreamGSATGINE
+except ImportError:
+    from dual_stream_gsat import DualStreamGSATGINE
 
 OUTPUT_DIR = MODELS_DIR / "edge_export"
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)

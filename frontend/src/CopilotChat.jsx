@@ -14,6 +14,36 @@ export default function CopilotChat({ currentRegimen = [] }) {
   const [loading, setLoading] = useState(false);
   const [rxText, setRxText] = useState('');
   const [ocrLoading, setOcrLoading] = useState(false);
+  const fileInputRef = React.useRef(null);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setOcrLoading(true);
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const res = await fetch(`${API_BASE}/rx/ocr`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (data.extracted_drugs && data.extracted_drugs.length > 0) {
+        const drugListStr = data.extracted_drugs.map(d => `${d.identified_name} (${d.dosage}, ${d.frequency})`).join(", ");
+        const engine = data.ocr_engine || "Vision AI";
+        sendMessage(`[${engine}] Scanned Prescription: Found [${drugListStr}]. Please analyze safety against my regimen.`);
+      } else {
+        alert("No medications recognized from image. Please try pasting the text directly.");
+      }
+    } catch (err) {
+      alert("Failed to upload and parse prescription image.");
+    } finally {
+      setOcrLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const sendMessage = async (textToSend) => {
     const text = textToSend || input;
@@ -193,26 +223,58 @@ export default function CopilotChat({ currentRegimen = [] }) {
           }}
         />
 
-        <button 
-          onClick={handleScanRx}
-          disabled={ocrLoading}
-          style={{
-            background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '10px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            fontSize: '0.85rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px'
-          }}
-        >
-          <FileText size={16} /> {ocrLoading ? "Extracting Drugs..." : "Scrape & Screen Prescriptions"}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            accept="image/*" 
+            style={{ display: 'none' }} 
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={ocrLoading}
+            style={{
+              flex: 1,
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#38bdf8',
+              borderRadius: '8px',
+              padding: '10px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <Camera size={15} /> Upload Photo
+          </button>
+
+          <button 
+            onClick={handleScanRx}
+            disabled={ocrLoading}
+            style={{
+              flex: 1.3,
+              background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '10px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <FileText size={15} /> {ocrLoading ? "Scanning..." : "Parse Text"}
+          </button>
+        </div>
 
         <div style={{ marginTop: 'auto', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#06b6d4', marginBottom: '6px' }}>⚡ Try Quick Prompts:</div>

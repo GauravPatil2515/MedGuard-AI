@@ -5,21 +5,31 @@ import {
   User, Shield, Activity, Bell, Info, Bot
 } from 'lucide-react';
 import CopilotChat from './CopilotChat';
+import AdherenceCalendar from './AdherenceCalendar';
+import ScheduleManager from './ScheduleManager';
+import CaregiverDashboard from './CaregiverDashboard';
 
 const API_BASE = "http://localhost:5000/api";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('patient'); // 'patient' | 'caregiver'
+  const [activeTab, setActiveTab] = useState('patient'); // 'patient' | 'caregiver' | 'copilot'
   const [selectedPreset, setSelectedPreset] = useState('mrs_kulkarni_cardiac');
   const [prescriptionData, setPrescriptionData] = useState(null);
   const [safetyAnalysis, setSafetyAnalysis] = useState(null);
   const [auditRecords, setAuditRecords] = useState([]);
   const [verificationResult, setVerificationResult] = useState(null);
   const [caregiverAlert, setCaregiverAlert] = useState(null);
+  const [caregiverAlerts, setCaregiverAlerts] = useState([]);
   const [playingAudio, setPlayingAudio] = useState(false);
   const [selectedLang, setSelectedLang] = useState('mr'); // 'mr' | 'hi' | 'en'
   const [takenStatus, setTakenStatus] = useState({});
   const [loading, setLoading] = useState(false);
+  const [doseUpdateCounter, setDoseUpdateCounter] = useState(0);
+
+  const handleDoseUpdated = () => {
+    setDoseUpdateCounter(prev => prev + 1);
+    fetchAuditTrail();
+  };
 
   // Fetch Preset on load or change
   useEffect(() => {
@@ -35,7 +45,9 @@ export default function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'CRITICAL_MISSED_DOSE_ALERT') {
           setCaregiverAlert(data);
+          setCaregiverAlerts(prev => [data, ...prev.slice(0, 9)]);
           fetchAuditTrail();
+          setDoseUpdateCounter(prev => prev + 1);
         }
       } catch (err) {
         console.error("SSE parse error", err);
@@ -265,9 +277,9 @@ export default function App() {
       )}
 
       {/* Main Content Areas */}
-      {activeTab === 'patient' ? (
-        /* PATIENT MODE */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+      {activeTab === 'patient' && (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
           
           {/* Column 1: Daily Dose Schedule & 1-Click Verification */}
           <div className="glass-panel" style={{ padding: '24px' }}>
@@ -427,11 +439,24 @@ export default function App() {
             </div>
 
           </div>
+          </div>
+
+          {/* 30-Day Adherence Calendar & Live Schedule Manager */}
+          <ScheduleManager onDoseUpdated={handleDoseUpdated} />
+          <AdherenceCalendar onDoseUpdated={doseUpdateCounter} />
 
         </div>
-      ) : (
-        /* CAREGIVER GUARDIAN MODE */
+      )}
+
+      {/* CAREGIVER GUARDIAN MODE */}
+      {activeTab === 'caregiver' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          <CaregiverDashboard 
+            caregiverId="cg_rahul_01" 
+            activeAlerts={caregiverAlerts}
+            onClearAlert={(idx) => setCaregiverAlerts(prev => prev.filter((_, i) => i !== idx))}
+          />
           
           {/* Caregiver Summary Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
@@ -537,10 +562,10 @@ export default function App() {
                           {rec.details?.status || 'LOGGED'}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 10px' }} className="mono-tag" style={{ color: '#06b6d4' }}>
+                      <td className="mono-tag" style={{ padding: '12px 10px', color: '#06b6d4' }}>
                         {rec.record_hash?.substring(0, 16)}...
                       </td>
-                      <td style={{ padding: '12px 10px' }} className="mono-tag" style={{ color: '#64748b' }}>
+                      <td className="mono-tag" style={{ padding: '12px 10px', color: '#64748b' }}>
                         {rec.prev_record_hash?.substring(0, 16)}...
                       </td>
                     </tr>

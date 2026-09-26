@@ -24,7 +24,10 @@ if str(MODELS_DIR) not in sys.path:
 from services.drug_dictionary import DRUG_DATABASE, normalize_drug_name
 
 try:
-    from tox_engine import UnifiedToxEngine
+    try:
+        from models.tox_engine import UnifiedToxEngine
+    except ImportError:
+        from tox_engine import UnifiedToxEngine
     TOX_ENGINE_AVAILABLE = True
 except Exception as e:
     logger.warning(f"UnifiedToxEngine could not be imported: {e}")
