@@ -23,6 +23,10 @@ import {
   addTreatment
 } from './lib/patientRecordStore';
 
+// Firebase Realtime Service
+import { subscribeToCaregiverAlerts, syncDoseToFirebase } from './lib/firebase';
+
+
 const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
 
 export default function App() {
@@ -79,7 +83,7 @@ export default function App() {
     init();
   }, []);
 
-  // 2. Server-Sent Events (SSE) Live Telemetry Stream
+  // 2. Dual Real-Time Telemetry: SSE + Firebase Realtime Database
   useEffect(() => {
     let eventSource;
     try {
@@ -97,10 +101,23 @@ export default function App() {
     } catch (e) {
       console.warn("SSE connection error", e);
     }
+
+    // Firebase Realtime Database listener for caregiver alerts
+    const unsubscribeFirebase = subscribeToCaregiverAlerts(
+      patientRecord?.patientId || 'patient_mrs_kulkarni_01',
+      (firebaseAlert) => {
+        if (firebaseAlert && (firebaseAlert.type === 'CRITICAL_MISSED_DOSE_ALERT' || firebaseAlert.action_required)) {
+          setCaregiverAlert(firebaseAlert);
+        }
+      }
+    );
+
     return () => {
       if (eventSource) eventSource.close();
+      if (unsubscribeFirebase) unsubscribeFirebase();
     };
-  }, []);
+  }, [patientRecord?.patientId]);
+
 
   const checkHealth = async () => {
     try {
@@ -140,20 +157,25 @@ export default function App() {
       // Inform backend if connected
       const targetDose = (patientRecord.todayDoses || []).find(d => d.id === doseId);
       if (targetDose) {
+        const payload = {
+          patient_id: patientRecord.patientId || "patient_mrs_kulkarni_01",
+          drug_name: targetDose.drugName,
+          status: status,
+          criticality: targetDose.criticality || "HIGH"
+        };
         fetch(`${API_BASE}/schedules/dose`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            patient_id: patientRecord.patientId || "patient_mrs_kulkarni_01",
-            drug_name: targetDose.drugName,
-            status: status,
-            criticality: targetDose.criticality || "HIGH"
-          })
+          body: JSON.stringify(payload)
         }).catch(() => {});
+
+        // Direct Firebase Realtime Database sync
+        syncDoseToFirebase(payload.patient_id, payload);
       }
     } catch (err) {
       console.error("Dose action error:", err);
     }
+
   };
 
   // 4. Central Reactive Action: Add Prescribed Medication & Run Pairwise DDI

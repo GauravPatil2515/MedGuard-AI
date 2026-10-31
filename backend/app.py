@@ -796,9 +796,20 @@ def api_log_dose():
         }
     )
 
+    # Synchronize to Firebase Realtime Database
+    try:
+        firebase_service.update_patient_status(patient_id, {
+            "last_drug": drug_name,
+            "last_status": status,
+            "scheduled_time": scheduled_time,
+            "criticality": criticality
+        })
+    except Exception as e:
+        app.logger.warning(f"Firebase status sync notice: {e}")
+
     is_critical_miss = (status == "MISSED" and criticality.upper() in ["HIGH", "CRITICAL"])
     if is_critical_miss:
-        broadcast_caregiver_alert({
+        alert_payload = {
             "type": "CRITICAL_MISSED_DOSE_ALERT",
             "patient_id": patient_id,
             "drug_name": drug_name,
@@ -806,7 +817,19 @@ def api_log_dose():
             "criticality": criticality,
             "timestamp": record["timestamp"],
             "action_required": f"High risk! Patient missed scheduled dose of {drug_name}."
-        })
+        }
+        broadcast_caregiver_alert(alert_payload)
+        notification_service.send_caregiver_push(
+            caregiver_id="caregiver_primary",
+            patient_name=patient_id,
+            drug_name=drug_name,
+            criticality=criticality
+        )
+        try:
+            firebase_service.push_caregiver_alert(patient_id, alert_payload)
+        except Exception as e:
+            app.logger.warning(f"Firebase caregiver alert push notice: {e}")
+
 
     return jsonify({
         **event,
