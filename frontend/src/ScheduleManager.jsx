@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Plus, Check, X, Pill, AlertCircle, ShieldAlert, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 
+const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+
 export default function ScheduleManager({ patientId = 'patient_mrs_kulkarni_01', onDoseUpdated }) {
   const [todaySchedule, setTodaySchedule] = useState([]);
   const [activeSchedules, setActiveSchedules] = useState([]);
@@ -23,8 +25,8 @@ export default function ScheduleManager({ patientId = 'patient_mrs_kulkarni_01',
     setLoading(true);
     try {
       const [resToday, resAll] = await Promise.all([
-        fetch(`http://127.0.0.1:5000/api/patients/${patientId}/schedule/today`),
-        fetch(`http://127.0.0.1:5000/api/patients/${patientId}/schedules`)
+        fetch(`${API_BASE}/patients/${patientId}/schedule/today`),
+        fetch(`${API_BASE}/patients/${patientId}/schedules`)
       ]);
       if (resToday.ok) {
         setTodaySchedule(await resToday.json());
@@ -49,7 +51,7 @@ export default function ScheduleManager({ patientId = 'patient_mrs_kulkarni_01',
                          doseItem.drug_name.toLowerCase().includes('amiodarone') ||
                          doseItem.drug_name.toLowerCase().includes('insulin');
 
-      const res = await fetch('http://127.0.0.1:5000/api/schedules/dose', {
+      const res = await fetch(`${API_BASE}/schedules/dose`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,7 +79,7 @@ export default function ScheduleManager({ patientId = 'patient_mrs_kulkarni_01',
     if (!newDrug.drug_name) return;
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/schedules', {
+      const res = await fetch(`${API_BASE}/schedules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

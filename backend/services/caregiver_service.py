@@ -37,6 +37,15 @@ def init_caregiver_tables():
     conn = get_conn()
     try:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            TEXT PRIMARY KEY,
+                email         TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role          TEXT NOT NULL DEFAULT 'PATIENT',
+                full_name     TEXT NOT NULL,
+                created_at    TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS patients (
                 id          TEXT PRIMARY KEY,
                 name        TEXT NOT NULL,
@@ -94,9 +103,24 @@ def init_caregiver_tables():
                 missed_reason   TEXT,
                 created_at      TEXT DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS medication_risk_flags (
+                id              TEXT PRIMARY KEY,
+                prescription_id TEXT,
+                patient_id      TEXT,
+                raw_ocr_text    TEXT,
+                drugs           TEXT,
+                conditions      TEXT,
+                interactions    TEXT,
+                side_effects    TEXT,
+                needs_review    INTEGER DEFAULT 0,
+                max_severity    TEXT DEFAULT 'SAFE',
+                disclaimer      TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            );
         """)
         conn.commit()
-        logger.info("Caregiver tables initialized")
+        logger.info("Caregiver and Risk Flag tables initialized")
     finally:
         conn.close()
 
@@ -104,7 +128,7 @@ def init_caregiver_tables():
 
 
 def seed_demo_data():
-    """Seeds rich demo data for Mrs. Sunita Kulkarni and caregiver Rahul if not already present."""
+    """Seeds rich demo data for Ms. Atharva and caregiver Rahul if not already present."""
     conn = get_conn()
     try:
         existing = conn.execute("SELECT id FROM patients WHERE id='patient_mrs_kulkarni_01'").fetchone()
@@ -115,7 +139,7 @@ def seed_demo_data():
         conn.execute("""
             INSERT OR IGNORE INTO patients (id, name, age, diagnosis, phone)
             VALUES (?, ?, ?, ?, ?)
-        """, ('patient_mrs_kulkarni_01', 'Mrs. Sunita Kulkarni', 68, 'Post-MI, Atrial Fibrillation, Type-2 Diabetes', '+91 98200 11223'))
+        """, ('patient_mrs_kulkarni_01', 'Ms. Atharva', 68, 'Post-MI, Atrial Fibrillation, Type-2 Diabetes', '+91 98200 11223'))
 
         # 2. Create Caregiver
         conn.execute("""
@@ -425,3 +449,76 @@ def get_adherence_summary(patient_id: str, days: int = 30) -> Dict:
         }
     finally:
         conn.close()
+
+
+# ── Medication Risk Flags Persistence ──────────────────────────────────────────
+
+def save_risk_flags(
+    prescription_id: str,
+    patient_id: str,
+    raw_ocr_text: str,
+    drugs: List[Dict],
+    conditions: List[Dict],
+    interactions: List[Dict],
+    side_effects: List[Dict],
+    needs_review: bool,
+    max_severity: str = "SAFE",
+    disclaimer: str = "AI-generated, not a substitute for professional medical advice."
+) -> Dict[str, Any]:
+    """Persists risk analysis results from risk_pipeline to medication_risk_flags table."""
+    flag_id = f"flag_{_uid()}"
+    conn = get_conn()
+    try:
+        conn.execute("""
+            INSERT INTO medication_risk_flags (
+                id, prescription_id, patient_id, raw_ocr_text, drugs,
+                conditions, interactions, side_effects, needs_review,
+                max_severity, disclaimer
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            flag_id,
+            prescription_id,
+            patient_id,
+            raw_ocr_text,
+            json.dumps(drugs),
+            json.dumps(conditions),
+            json.dumps(interactions),
+            json.dumps(side_effects),
+            1 if needs_review else 0,
+            max_severity,
+            disclaimer
+        ))
+        conn.commit()
+        return {"id": flag_id, "needs_review": needs_review, "max_severity": max_severity}
+    finally:
+        conn.close()
+
+
+def get_risk_flags(patient_id: Optional[str] = None, limit: int = 10) -> List[Dict]:
+    """Retrieves stored medication risk flags."""
+    conn = get_conn()
+    try:
+        if patient_id:
+            rows = conn.execute("""
+                SELECT * FROM medication_risk_flags WHERE patient_id = ?
+                ORDER BY created_at DESC LIMIT ?
+            """, (patient_id, limit)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT * FROM medication_risk_flags
+                ORDER BY created_at DESC LIMIT ?
+            """, (limit,)).fetchall()
+
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["drugs"] = json.loads(d.get("drugs") or "[]")
+            d["conditions"] = json.loads(d.get("conditions") or "[]")
+            d["interactions"] = json.loads(d.get("interactions") or "[]")
+            d["side_effects"] = json.loads(d.get("side_effects") or "[]")
+            d["needs_review"] = bool(d.get("needs_review", 0))
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+

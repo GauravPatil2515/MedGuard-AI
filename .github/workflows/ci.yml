@@ -1,0 +1,55 @@
+name: MedGuard AI — Continuous Integration & Quality Suite
+
+on:
+  push:
+    branches: [ main, master, Atharva ]
+  pull_request:
+    branches: [ main, master, Atharva ]
+
+jobs:
+  backend-test:
+    name: Backend Tests & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install flake8 pytest
+
+      - name: Run Backend Unit Tests
+        run: |
+          python -m unittest discover -s backend/tests
+
+  frontend-build:
+    name: Frontend Build & Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Production Assets
+        working-directory: frontend
+        run: npm run build

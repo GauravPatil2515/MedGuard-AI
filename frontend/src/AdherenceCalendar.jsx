@@ -6,10 +6,11 @@ export default function AdherenceCalendar({ patientId = 'patient_mrs_kulkarni_01
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
 
-  const fetchAdherence = async () => {
+  const fetchAdherence = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/patients/${patientId}/adherence?days=30`);
+      const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+      const res = await fetch(`${API_BASE}/patients/${patientId}/adherence?days=30`);
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -19,11 +20,11 @@ export default function AdherenceCalendar({ patientId = 'patient_mrs_kulkarni_01
     } finally {
       setLoading(false);
     }
-  };
+  }, [patientId]);
 
   useEffect(() => {
     fetchAdherence();
-  }, [patientId, onDoseUpdated]);
+  }, [fetchAdherence, onDoseUpdated]);
 
   // Generate 30 days array ending today
   const getDaysArray = () => {
@@ -334,15 +335,14 @@ export default function AdherenceCalendar({ patientId = 'patient_mrs_kulkarni_01
 
       {/* Selected Day Inspector */}
       {selectedDay && (
-        <div style={{
+        <div className="fade-in" style={{
           background: 'rgba(30, 41, 59, 0.7)',
           border: '1px solid rgba(56, 189, 248, 0.3)',
           borderRadius: '14px',
           padding: '16px',
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
-          animation: 'fadeIn 0.2s ease-in-out'
+          alignItems: 'center'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             {selectedDay.status === 'perfect' && <CheckCircle2 size={24} color="#10b981" />}

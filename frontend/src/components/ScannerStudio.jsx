@@ -4,6 +4,8 @@ import {
   ArrowRight, ShieldCheck, Sparkles, RefreshCw, Layers, PlusCircle
 } from 'lucide-react';
 
+const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+
 export default function ScannerStudio({ 
   onScanComplete, 
   onNavigateToSafety, 
@@ -21,7 +23,7 @@ export default function ScannerStudio({
   const presets = [
     {
       id: 'mrs_kulkarni_cardiac',
-      name: 'Mrs. Sunita Kulkarni (Cardiac)',
+      name: 'Ms. Atharva (Cardiac)',
       diagnosis: 'Post-MI, Atrial Fibrillation, Type-2 Diabetes',
       drugs: ['Warfarin 5mg', 'Metformin 500mg', 'Atorvastatin 40mg', 'Aspirin 75mg']
     },
@@ -54,7 +56,7 @@ export default function ScannerStudio({
     formData.append('image', file);
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/rx/ocr', {
+      const res = await fetch(`${API_BASE}/rx/ocr`, {
         method: 'POST',
         body: formData
       });
@@ -73,7 +75,7 @@ export default function ScannerStudio({
     if (!rawText.trim()) return;
     setIsScanning(true);
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/rx/ocr', {
+      const res = await fetch(`${API_BASE}/rx/ocr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw_text: rawText })
@@ -93,7 +95,7 @@ export default function ScannerStudio({
     setImagePreview(null);
     setIsScanning(true);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/rx/preset/${preset.id}`);
+      const res = await fetch(`${API_BASE}/rx/preset/${preset.id}`);
       if (res.ok) {
         const data = await res.json();
         const formatted = {

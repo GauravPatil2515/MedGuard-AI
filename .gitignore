@@ -28,6 +28,14 @@ build/
 
 # Databases & Artifacts
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 !test_*.db
+
+# LaTeX Auxiliaries
+*.aux
+*.out
+*.log
+

@@ -4,6 +4,8 @@ import {
   Clock, Activity, Heart, RefreshCw, FileText, ChevronRight, ShieldCheck
 } from 'lucide-react';
 
+const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+
 export default function CaregiverDashboard({ 
   caregiverId = 'cg_rahul_01', 
   activeAlerts = [], 
@@ -20,7 +22,7 @@ export default function CaregiverDashboard({
   const fetchCaregiverData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/caregivers/${caregiverId}/patients`);
+      const res = await fetch(`${API_BASE}/caregivers/${caregiverId}/patients`);
       if (res.ok) {
         const pList = await res.json();
         setPatients(pList);
@@ -46,8 +48,8 @@ export default function CaregiverDashboard({
     const loadPatientDetails = async () => {
       try {
         const [resSched, resAdh] = await Promise.all([
-          fetch(`http://127.0.0.1:5000/api/patients/${selectedPatient.id}/schedule/today`),
-          fetch(`http://127.0.0.1:5000/api/patients/${selectedPatient.id}/adherence?days=30`)
+          fetch(`${API_BASE}/patients/${selectedPatient.id}/schedule/today`),
+          fetch(`${API_BASE}/patients/${selectedPatient.id}/adherence?days=30`)
         ]);
         if (resSched.ok) setPatientSchedule(await resSched.json());
         if (resAdh.ok) {
@@ -55,7 +57,7 @@ export default function CaregiverDashboard({
           setAdherenceData(adhJson);
 
           // Also fetch OpenFDA cross-ref for the patient's common drugs
-          fetch('http://127.0.0.1:5000/api/safety/fda/crossref', {
+          fetch(`${API_BASE}/safety/fda/crossref`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ medications: ['Warfarin', 'Aspirin', 'Metformin'] })

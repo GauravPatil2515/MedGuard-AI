@@ -1,0 +1,168 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{amssymb}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{fancyhdr}
+
+\setlength{\headheight}{14pt}
+\addtolength{\topmargin}{-2pt}
+
+% Brand Colors
+\definecolor{primary}{RGB}{14, 116, 144}     % Deep Teal / Cyan
+\definecolor{secondary}{RGB}{30, 41, 59}     % Slate Dark
+\definecolor{accent}{RGB}{234, 88, 12}       % Warm Amber / Orange
+\definecolor{lightbg}{RGB}{248, 250, 252}    % Soft Gray
+\definecolor{bordercolor}{RGB}{203, 213, 225}% Slate light border
+\definecolor{successgreen}{RGB}{22, 101, 52} % Forest Green
+
+% Typography & Spacing
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\textcolor{secondary}{\textbf{SAFE CAP+} \textbullet\ Project Blueprint}}
+\lhead{\textcolor{secondary}{MedGuard AI Platform}}
+\rfoot{\textcolor{secondary}{Page \thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=primary,
+    urlcolor=primary,
+    pdftitle={SAFE CAP+ Implementation Plan},
+    pdfauthor={MedGuard AI Team}
+}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{primary}}{\thesection}{1em}{}[{\titlerule[0.8pt]}]
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{secondary}}{\thesubsection}{1em}{}
+
+\tcbset{
+  colback=lightbg,
+  colframe=bordercolor,
+  arc=3mm,
+  boxrule=1pt,
+  left=12pt,
+  right=12pt,
+  top=10pt,
+  bottom=10pt
+}
+
+\begin{document}
+
+% Header Block
+\begin{center}
+    {\Huge \textbf{\textcolor{primary}{SAFE CAP\textsuperscript{+}}}}\\[6pt]
+    {\Large \textbf{\textcolor{secondary}{Intelligent Medication Packaging \& Monitoring System}}}\\[4pt]
+    {\normalsize \textcolor{secondary}{\textit{System Architecture and Implementation Plan for Improved Adherence and Patient Safety}}}\\[8pt]
+    \rule{\textwidth}{1.5pt}
+\end{center}
+
+\vspace{0.2cm}
+
+% Executive Summary
+\begin{tcolorbox}[colback=primary!5,colframe=primary]
+    \textbf{\textcolor{primary}{Quick Overview for Everyone:}} \\
+    Many patients forget to take their daily medications (like blood sugar or blood pressure tablets) at the right time. \textbf{SAFE CAP\textsuperscript{+}} links a physical child-resistant medicine bottle to a simple smartphone app using a QR code. It gives patients clear daily reminders, easy-to-read medicine guides, and notifies family members if an essential dose is missed.
+\end{tcolorbox}
+
+\section{The Real-World Problem}
+Chronic illnesses like diabetes and hypertension require strict daily medication regimens to remain effective:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Missed or Delayed Doses:} Daily distractions, busy schedules, and aging cause frequent forgotten doses.
+    \item \textbf{Confusing Medical Jargon:} Prescription inserts are long, technical, and hard to understand.
+    \item \textbf{Child Safety Risks:} Traditional bottles are often accidentally opened by curious young children at home.
+    \item \textbf{Lack of Caregiver Awareness:} Family members only learn about missed doses when health complications arise.
+\end{itemize}
+
+\section{The SAFE CAP\textsuperscript{+} Solution}
+SAFE CAP\textsuperscript{+} combines physical packaging with digital care in four straightforward pillars:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{|p{3.2cm}|X|}
+\hline
+\rowcolor{primary!10}
+\textbf{Component} & \textbf{Everyday Benefit for Patients and Families} \\
+\hline
+\textbf{1. Child-Resistant Smart Packaging} & Push-and-turn bottle caps prevent accidental child poisoning while keeping medications safe and dry. \\
+\hline
+\textbf{2. 1-Scan QR Code Onboarding} & No typing required. A quick scan of the bottle with any smartphone camera opens the app directly to that specific medicine. \\
+\hline
+\textbf{3. Plain-Language Medicine Guide} & Explains what the pill does, when to take it (e.g., with breakfast), potential side effects, and safe storage in simple words. \\
+\hline
+\textbf{4. Smart Reminders \& Caregiver Bridge} & Timely notifications with a 1-click ``Mark as Taken'' button. If an important dose is missed, caregivers are immediately notified. \\
+\hline
+\end{tabularx}
+\end{center}
+
+\section{Patient Journey (Example: Glimepiride 2 mg)}
+\begin{enumerate}[leftmargin=*,itemsep=4pt]
+    \item \textbf{At the Pharmacy:} The patient receives their prescribed bottle of 30 tablets with the SAFE CAP\textsuperscript{+} QR label and child-proof cap.
+    \item \textbf{At Home:} The patient scans the bottle's QR code with their mobile phone.
+    \item \textbf{Instant Setup:} The app instantly loads the medicine profile: \textit{``Glimepiride 2 mg — Take 1 tablet daily with breakfast.''}
+    \item \textbf{Daily Alert:} At 8:00 AM, the phone sounds a friendly reminder.
+    \item \textbf{1-Click Confirmation:} The patient takes the tablet and taps \textbf{``Mark as Taken''}.
+    \item \textbf{Safety Backup:} If the dose is forgotten, a real-time alert is escalated to a designated caregiver so they can gently check in.
+\end{enumerate}
+
+\newpage
+
+\section{Implementation Roadmap (Step-by-Step)}
+
+\subsection{Phase 1: Plain-Language Medicine Knowledge Base}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item \textbf{What it does:} Translates complex chemical details into simple answers:
+    \begin{itemize}
+        \item \textit{Purpose:} e.g., ``Helps your pancreas naturally release insulin after food.''
+        \item \textit{How to Take:} e.g., ``Take with breakfast or your first main meal. Do not skip meals.''
+        \item \textit{Side Effects:} e.g., ``Signs of low blood sugar: shaking, dizziness, hunger.''
+        \item \textit{Storage:} e.g., ``Store below 25$^\circ$C in a dry place. Keep child-resistant cap locked.''
+    \end{itemize}
+    \item \textbf{Vernacular Audio:} Spoken voice guides in \textbf{Marathi}, \textbf{Hindi}, and \textbf{English} for elderly patients who prefer listening over reading.
+\end{itemize}
+
+\subsection{Phase 2: Smart QR Code Generator \& Mobile Scanner}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Bottle QR Generator:} Creates unique packaging QR codes encoding the drug identity, prescribed dosage, and batch verification.
+    \item \textbf{In-App Scanner:} Works seamlessly via any phone camera inside the web app with zero app store installation hurdles.
+\end{itemize}
+
+\subsection{Phase 3: Clean, Friendly Patient Interface (PWA)}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item Large, easy-to-read text designed with high contrast for older adults.
+    \item Prominent \textbf{``Take Dose Now''} button with haptic or audio feedback.
+    \item Visual \textbf{Pill Inventory Tracker} (e.g., \textit{``6 tablets left in your bottle — Time to refill''}).
+\end{itemize}
+
+\subsection{Phase 4: Family \& Caregiver Guardian Network}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item Real-Time Alerts: Sends immediate notifications to a caregiver's phone when high-priority medications are missed.
+    \item Verified History Log: Keeps an accurate record of taken doses that can be shared with treating doctors at clinic visits.
+\end{itemize}
+
+\section{Project Deliverables Summary}
+\begin{tcolorbox}[colback=successgreen!5,colframe=successgreen]
+\textbf{\textcolor{successgreen}{What We Are Building:}}
+\begin{itemize}[itemsep=2pt]
+    \item[\checkmark] \textbf{Mobile-Ready Web Application (PWA):} Fast, responsive, works across Android, iOS, and PCs.
+    \item[\checkmark] \textbf{Physical Packaging Integration:} Printable QR code mockups for standard medicine bottles.
+    \item[\checkmark] \textbf{Multilingual Spoken Audio:} Marathi, Hindi, and English voice synthesis.
+    \item[\checkmark] \textbf{Caregiver Dashboard:} Real-time alert stream and dose verification history.
+\end{itemize}
+\end{tcolorbox}
+
+\vspace{0.4cm}
+\begin{center}
+    \small \textcolor{secondary}{\textbf{SAFE CAP\textsuperscript{+} Team} \textbullet\ Powered by MedGuard AI \textbullet\ 2026}
+\end{center}
+
+\end{document}

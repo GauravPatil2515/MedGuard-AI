@@ -1,214 +1,297 @@
 import React, { useState, useEffect } from 'react';
+
+// Auth Context
+import { useAuth, ROLES } from './context/AuthContext.jsx';
+
+// Unified UI System Components
+import AppHeader from './components/ui/AppHeader';
+import BottomNav from './components/ui/BottomNav';
+import AuditLedgerModal from './components/AuditLedgerModal';
+
+// Views (SAFE CAP+)
+import DashboardView from './components/views/DashboardView';
+import ScannerView from './components/views/ScannerView';
+import CaregiverView from './components/views/CaregiverView';
+import SafetyView from './components/views/SafetyView';
+import AdminScannerView from './components/views/AdminScannerView';
+
+
+// Unified Reactive Store (On-Device + AES-GCM Encrypted)
 import { 
-  ShieldAlert, ShieldCheck, RefreshCw, Bell, AlertTriangle, 
-  FileText, Lock, Volume2, Phone
-} from 'lucide-react';
+  loadPatientRecord, 
+  logDoseStatus, 
+  addTreatment
+} from './lib/patientRecordStore';
 
-import Header from './components/Header';
-import ScannerStudio from './components/ScannerStudio';
-import SafetyStudio from './components/SafetyStudio';
-import ScheduleManager from './ScheduleManager';
-import AdherenceCalendar from './AdherenceCalendar';
-import CaregiverDashboard from './CaregiverDashboard';
-import CopilotChat from './CopilotChat';
-
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('scanner'); // 'scanner' | 'adherence' | 'safety' | 'caregiver' | 'copilot'
-  const [selectedPreset, setSelectedPreset] = useState('mrs_kulkarni_cardiac');
-  const [prescriptionData, setPrescriptionData] = useState(null);
-  const [safetyAnalysis, setSafetyAnalysis] = useState(null);
-  const [auditRecords, setAuditRecords] = useState([]);
-  const [verificationResult, setVerificationResult] = useState(null);
-  const [caregiverAlert, setCaregiverAlert] = useState(null);
-  const [caregiverAlerts, setCaregiverAlerts] = useState([]);
+  const { user, login, logout, switchRole, isAdmin, isUser, isLoggedIn } = useAuth();
+  
+  const [activeTab, setActiveTab] = useState('home');
   const [selectedLang, setSelectedLang] = useState('mr'); // 'mr' | 'hi' | 'en'
-  const [doseUpdateCounter, setDoseUpdateCounter] = useState(0);
-  const [isSseConnected, setIsSseConnected] = useState(false);
+  const [isBackendHealthy, setIsBackendHealthy] = useState(true);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
-  // Initial data load
+  // Single Source of Truth: Unified Reactive Patient Record
+  const [patientRecord, setPatientRecord] = useState(null);
+  const [loadingRecord, setLoadingRecord] = useState(true);
+
+  // Patient Demographic Metadata
+  const [patientData, setPatientData] = useState({
+    patient_name: "Mrs. Kulkarni",
+    age: 68,
+    diagnosis: "Post-CABG • Atrial Fibrillation"
+  });
+
+  const [caregiverAlert, setCaregiverAlert] = useState(null);
+
+  // Emergency call handler
+  const handleEmergencyCall = () => {
+    window.location.href = "tel:+919820011223";
+  };
+
+  // Check URL for role parameter on load
   useEffect(() => {
-    fetchPreset(selectedPreset);
-    fetchAuditTrail();
-  }, [selectedPreset]);
-
-  // Server-Sent Events (SSE) Live Telemetry Stream
-  useEffect(() => {
-    const eventSource = new EventSource(`${API_BASE}/caregiver/stream`);
-    
-    eventSource.onopen = () => setIsSseConnected(true);
-    eventSource.onerror = () => setIsSseConnected(false);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'CRITICAL_MISSED_DOSE_ALERT') {
-          setCaregiverAlert(data);
-          setCaregiverAlerts(prev => [data, ...prev.slice(0, 9)]);
-          fetchAuditTrail();
-          setDoseUpdateCounter(prev => prev + 1);
-        }
-      } catch (err) {
-        console.error("SSE parse error", err);
-      }
-    };
-    return () => eventSource.close();
+    const urlParams = new URLSearchParams(window.location.search);
+    const roleParam = urlParams.get('role');
+    if (roleParam === 'admin' && !isLoggedIn) {
+      login(ROLES.ADMIN, { name: 'Pharmacist Admin' });
+    } else if (!isLoggedIn) {
+      login(ROLES.USER, { name: 'Mrs. Kulkarni' });
+    }
   }, []);
 
-  const fetchPreset = async (presetId) => {
+  // 1. Initial Load: Load local encrypted record and sync backend if available
+  useEffect(() => {
+    async function init() {
+      try {
+        const record = await loadPatientRecord('patient_mrs_kulkarni_01');
+        setPatientRecord(record);
+      } catch (e) {
+        console.error("Failed to load patient record:", e);
+      } finally {
+        setLoadingRecord(false);
+      }
+      checkHealth();
+      loadBackendPreset('mrs_kulkarni_cardiac');
+    }
+    init();
+  }, []);
+
+  // 2. Server-Sent Events (SSE) Live Telemetry Stream
+  useEffect(() => {
+    let eventSource;
+    try {
+      eventSource = new EventSource(`${API_BASE}/caregiver/stream`);
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'CRITICAL_MISSED_DOSE_ALERT') {
+            setCaregiverAlert(data);
+          }
+        } catch (e) {
+          console.warn("SSE parse error", e);
+        }
+      };
+    } catch (e) {
+      console.warn("SSE connection error", e);
+    }
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, []);
+
+  const checkHealth = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/health`);
+      if (res.ok) setIsBackendHealthy(true);
+      else setIsBackendHealthy(false);
+    } catch {
+      setIsBackendHealthy(false);
+    }
+  };
+
+  const loadBackendPreset = async (presetId) => {
     try {
       const res = await fetch(`${API_BASE}/rx/preset/${presetId}`);
       if (res.ok) {
         const data = await res.json();
-        setPrescriptionData(data.prescription);
-        setSafetyAnalysis(data.safety_analysis);
-      }
-    } catch (err) {
-      console.error("Error loading preset", err);
-    }
-  };
-
-  const fetchAuditTrail = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/audit/trail`);
-      if (res.ok) {
-        const data = await res.json();
-        setAuditRecords(data.records || []);
-      }
-    } catch (err) {
-      console.error("Error fetching audit trail", err);
-    }
-  };
-
-  const verifyAuditLedger = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/audit/verify`);
-      if (res.ok) {
-        const data = await res.json();
-        setVerificationResult(data);
-      }
-    } catch (err) {
-      console.error("Error verifying audit trail", err);
-    }
-  };
-
-  const playVernacularAudio = async (warningType) => {
-    try {
-      const res = await fetch(`${API_BASE}/tts/audio?warning_type=${warningType}&lang=${selectedLang}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.audio_base64) {
-          const audio = new Audio(data.audio_base64);
-          audio.play().catch(e => console.warn("Audio autoplay blocked", e));
-        } else {
-          // Browser speech synthesis fallback
-          const msg = new SpeechSynthesisUtterance("Warning: Please take medications as advised by your doctor.");
-          window.speechSynthesis.speak(msg);
+        if (data.prescription) {
+          setPatientData({
+            patient_name: data.prescription.patient_name || "Mrs. Kulkarni",
+            age: data.prescription.age || 68,
+            diagnosis: data.prescription.diagnosis || "Post-CABG • Atrial Fibrillation"
+          });
         }
       }
     } catch (err) {
-      console.warn("TTS fallback", err);
+      console.warn("Preset sync notice:", err.message);
     }
   };
 
-  const handleScanComplete = (scanData) => {
-    if (scanData?.extracted_drugs) {
-      const drugNames = scanData.extracted_drugs.map(d => d.generic || d.identified_name);
-      fetch(`${API_BASE}/safety/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ medications: drugNames })
-      })
-      .then(r => r.json())
-      .then(safetyReport => setSafetyAnalysis(safetyReport))
-      .catch(err => console.error("Error analyzing scanned drugs:", err));
+  // 3. Central Reactive Action: Dose Taken / Missed
+  const handleDoseAction = async (doseId, status) => {
+    if (!patientRecord) return;
+    try {
+      const updated = await logDoseStatus(patientRecord, doseId, status);
+      setPatientRecord(updated);
+
+      // Inform backend if connected
+      const targetDose = (patientRecord.todayDoses || []).find(d => d.id === doseId);
+      if (targetDose) {
+        fetch(`${API_BASE}/schedules/dose`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: patientRecord.patientId || "patient_mrs_kulkarni_01",
+            drug_name: targetDose.drugName,
+            status: status,
+            criticality: targetDose.criticality || "HIGH"
+          })
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error("Dose action error:", err);
     }
   };
 
-  const handleDoseUpdated = () => {
-    setDoseUpdateCounter(prev => prev + 1);
-    fetchAuditTrail();
+  // 4. Central Reactive Action: Add Prescribed Medication & Run Pairwise DDI
+  const handleAddTreatment = async (treatmentData) => {
+    if (!patientRecord) return null;
+    try {
+      const updated = await addTreatment(patientRecord, treatmentData);
+      setPatientRecord(updated);
+      return updated;
+    } catch (err) {
+      console.error("Add treatment error:", err);
+      return null;
+    }
   };
 
-  const criticalInteractionsCount = safetyAnalysis?.interactions?.filter(i => i.severity === 'CRITICAL').length || 0;
+  // Dynamically compute unresolved critical risk count
+  const criticalAlertCount = (patientRecord?.riskEvents || []).filter(
+    r => r.status === 'unresolved' && (r.severity === 'Major' || r.severity === 'High Risk')
+  ).length;
+
+  // Role Selector Component
+  const RoleSelector = () => {
+    if (!isLoggedIn) return null;
+    
+    return (
+      <div style={{
+        display: 'flex', gap: '8px', padding: '6px 10px',
+        background: '#f1f5f9', borderRadius: 'var(--radius-full)',
+        alignItems: 'center', flexShrink: 0
+      }}>
+        <span className="meta-text" style={{ fontSize: '0.75rem', textTransform: 'uppercase' }}>Mode:</span>
+        <button
+          onClick={() => switchRole(ROLES.ADMIN)}
+          style={{
+            padding: '6px 16px', borderRadius: 'var(--radius-full)',
+            fontSize: '0.8rem', fontWeight: 700,
+            background: isAdmin ? 'var(--mg-primary)' : 'transparent',
+            color: isAdmin ? '#fff' : 'var(--mg-text-muted)',
+            border: 'none', cursor: 'pointer', transition: 'all 0.2s'
+          }}
+        >
+          Admin
+        </button>
+        <button
+          onClick={() => switchRole(ROLES.USER)}
+          style={{
+            padding: '6px 16px', borderRadius: 'var(--radius-full)',
+            fontSize: '0.8rem', fontWeight: 700,
+            background: isUser ? 'var(--mg-primary)' : 'transparent',
+            color: isUser ? '#fff' : 'var(--mg-text-muted)',
+            border: 'none', cursor: 'pointer', transition: 'all 0.2s'
+          }}
+        >
+          Patient
+        </button>
+      </div>
+    );
+  };
+
+  // Show loading state
+  if (loadingRecord) {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'var(--mg-canvas)'
+      }}>
+        <div style={{ 
+          width: '48px', height: '48px', borderRadius: '50%',
+          border: '3px solid var(--mg-primary)', borderTopColor: 'transparent',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+        <p style={{ marginTop: '16px', color: 'var(--mg-text-muted)', fontSize: '0.95rem' }}>
+          Loading your medications...
+        </p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
-      {/* Sticky Modern Top Navigation */}
-      <Header 
-        activeTab={activeTab} 
+      {/* Reusable Clean App Header */}
+      <AppHeader
+        activeTab={activeTab}
         setActiveTab={setActiveTab}
-        patientName={prescriptionData?.patient_name || 'Mrs. Sunita Kulkarni'}
-        patientAge={prescriptionData?.age || 68}
+        patientName={patientData.patient_name}
         selectedLang={selectedLang}
         setSelectedLang={setSelectedLang}
-        isSseConnected={isSseConnected}
-        criticalAlertCount={criticalInteractionsCount}
+        isBackendHealthy={isBackendHealthy}
+        criticalAlertCount={criticalAlertCount}
+        onEmergencyCall={handleEmergencyCall}
+        roleSelector={<RoleSelector />}
       />
 
-      {/* Main App Canvas */}
-      <main style={{ maxWidth: '1440px', width: '100%', margin: '0 auto', padding: '24px', flex: 1 }}>
+      {/* Main Content Area */}
+      <main className="app-shell">
         
-        {/* Real-time Caregiver Missed Dose Escalation Banner */}
+        {/* Real-time Caregiver Escalation Banner (when an SSE event arrives) */}
         {caregiverAlert && (
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(15, 23, 42, 0.9) 100%)',
-            border: '1px solid rgba(244, 63, 94, 0.4)',
-            borderRadius: '16px',
-            padding: '16px 20px',
-            marginBottom: '24px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '12px',
-            boxShadow: '0 8px 30px rgba(244, 63, 94, 0.2)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div style={{ background: '#f43f5e', padding: '10px', borderRadius: '50%', color: '#fff', display: 'flex' }}>
-                <Bell size={20} className="animate-pulse" />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.95rem' }}>
-                  CRITICAL MISSED DOSE ALERT: {caregiverAlert.drug_name} ({caregiverAlert.criticality})
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#fda4af', marginTop: '2px' }}>
-                  {caregiverAlert.action_required || "Immediate patient check recommended. High risk of therapeutic failure."}
-                </div>
-              </div>
+          <div 
+            className="mg-card fade-in"
+            style={{
+              padding: '16px 20px',
+              background: 'var(--mg-danger-soft)',
+              borderColor: 'var(--mg-danger-border)',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              border: '2px solid var(--mg-danger-border)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--mg-danger)' }} className="pulse-dot" />
+              <strong style={{ fontSize: '0.95rem', color: '#991b1b' }}>
+                ⚠️ Caregiver Alert: Missed {caregiverAlert.drug_name} dose
+              </strong>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <a
-                href="tel:+919820011223"
-                style={{
-                  background: '#10b981',
-                  color: '#fff',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  textDecoration: 'none',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => { setActiveTab('caregiver'); setCaregiverAlert(null); }}
+                className="btn-primary"
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
               >
-                <Phone size={14} /> Call Patient
-              </a>
+                View Details
+              </button>
               <button
                 onClick={() => setCaregiverAlert(null)}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: '#cbd5e1',
-                  border: 'none',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.82rem'
-                }}
+                className="btn-ghost"
+                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
               >
                 Dismiss
               </button>
@@ -216,162 +299,85 @@ export default function App() {
           </div>
         )}
 
-        {/* View 1: Prescription Scanner & OCR Studio (Hero) */}
-        {activeTab === 'scanner' && (
-          <ScannerStudio 
-            onScanComplete={handleScanComplete}
-            onNavigateToSafety={() => setActiveTab('safety')}
-            currentPrescription={prescriptionData}
-            onLoadPreset={(pid, data) => {
-              setSelectedPreset(pid);
-              setPrescriptionData(data.prescription);
-              setSafetyAnalysis(data.safety_analysis);
-            }}
-          />
-        )}
-
-        {/* View 2: Dose Adherence & Regimen Hub */}
-        {activeTab === 'adherence' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <ScheduleManager 
-              patientId="patient_mrs_kulkarni_01" 
-              onDoseUpdated={handleDoseUpdated} 
-            />
-            <AdherenceCalendar 
-              patientId="patient_mrs_kulkarni_01" 
-              onDoseUpdated={doseUpdateCounter} 
-            />
-          </div>
-        )}
-
-        {/* View 3: Deep Molecular Toxicology & DDI Studio */}
-        {activeTab === 'safety' && (
-          <SafetyStudio 
-            safetyAnalysis={safetyAnalysis}
-            currentMeds={prescriptionData?.medications || []}
+        {/* Admin Scanner View - Only visible in Admin mode */}
+        {isAdmin && (
+          <AdminScannerView
+            onNavigateTab={setActiveTab}
             selectedLang={selectedLang}
-            onPlayVernacular={playVernacularAudio}
+            onAddTreatment={handleAddTreatment}
+            API_BASE={API_BASE}
           />
         )}
 
-        {/* View 4: Caregiver Guardian Hub & 21 CFR Part 11 Vault */}
-        {activeTab === 'caregiver' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <CaregiverDashboard 
-              caregiverId="cg_rahul_01"
-              activeAlerts={caregiverAlerts}
-              onClearAlert={(idx) => setCaregiverAlerts(prev => prev.filter((_, i) => i !== idx))}
-            />
+        {/* User Views - General User mode */}
+        {!isAdmin && (
+          <>
+            {/* Tab 1: Today's Pills (Home) */}
+            {activeTab === 'home' && (
+              <DashboardView
+                patientData={patientData}
+                patientRecord={patientRecord}
+                onNavigateTab={setActiveTab}
+                onDoseAction={handleDoseAction}
+                selectedLang={selectedLang}
+                onEmergencyCall={handleEmergencyCall}
+                API_BASE={API_BASE}
+              />
+            )}
 
-            {/* Regulatory 21 CFR Part 11 Cryptographic Audit Trail */}
-            <div style={{
-              background: 'rgba(15, 21, 35, 0.75)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '20px',
-              padding: '24px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Lock size={20} color="#8b5cf6" />
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc' }}>
-                      21 CFR Part 11 Cryptographic Audit Ledger
-                    </h3>
-                  </div>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#94a3b8' }}>
-                    Tamper-evident SQLite WAL ledger with SHA-256 hash chaining and HMAC integrity verification
-                  </p>
-                </div>
+            {/* Tab 2: Scan Bottle */}
+            {activeTab === 'scanner' && (
+              <ScannerView
+                patientRecord={patientRecord}
+                onAddTreatment={handleAddTreatment}
+                onNavigateTab={setActiveTab}
+                selectedLang={selectedLang}
+                API_BASE={API_BASE}
+              />
+            )}
 
-                <button
-                  onClick={verifyAuditLedger}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '10px 18px',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    fontSize: '0.85rem',
-                    boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)'
-                  }}
-                >
-                  <RefreshCw size={15} />
-                  Verify Ledger Integrity
-                </button>
-              </div>
+            {/* Tab 3: Family Caregiver */}
+            {activeTab === 'caregiver' && (
+              <CaregiverView
+                patientRecord={patientRecord}
+                onNavigateTab={setActiveTab}
+                selectedLang={selectedLang}
+                onEmergencyCall={handleEmergencyCall}
+                API_BASE={API_BASE}
+              />
+            )}
 
-              {verificationResult && (
-                <div style={{
-                  background: verificationResult.valid ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
-                  border: `1px solid ${verificationResult.valid ? 'rgba(16, 185, 129, 0.35)' : 'rgba(244, 63, 94, 0.35)'}`,
-                  borderRadius: '12px',
-                  padding: '14px 18px',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: verificationResult.valid ? '#10b981' : '#f43f5e', fontWeight: 700, fontSize: '0.9rem' }}>
-                    <ShieldCheck size={18} />
-                    {verificationResult.compliance || "Integrity Verification Complete"}
-                  </div>
-                  <p style={{ fontSize: '0.8rem', color: '#cbd5e1', margin: '4px 0 0 0' }}>
-                    Status: {verificationResult.status} • Total Records Verified: {verificationResult.verified_records} • Cryptographic Hash Chain Intact.
-                  </p>
-                </div>
-              )}
-
-              {/* Audit Log Table */}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8' }}>
-                      <th style={{ padding: '10px' }}>ID</th>
-                      <th style={{ padding: '10px' }}>Timestamp</th>
-                      <th style={{ padding: '10px' }}>Medication</th>
-                      <th style={{ padding: '10px' }}>Action</th>
-                      <th style={{ padding: '10px' }}>SHA-256 Current Hash</th>
-                      <th style={{ padding: '10px' }}>Previous Hash</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditRecords.slice(0, 15).map((rec, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <td style={{ padding: '12px 10px', fontWeight: 700, color: '#8b5cf6' }}>#{rec.id}</td>
-                        <td style={{ padding: '12px 10px', color: '#94a3b8' }}>{new Date(rec.timestamp).toLocaleTimeString()}</td>
-                        <td style={{ padding: '12px 10px', fontWeight: 600, color: '#f8fafc' }}>{rec.molecule_name}</td>
-                        <td style={{ padding: '12px 10px' }}>
-                          <span style={{
-                            background: rec.details?.status === 'TAKEN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)',
-                            color: rec.details?.status === 'TAKEN' ? '#10b981' : '#f43f5e',
-                            padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700
-                          }}>
-                            {rec.details?.status || rec.action}
-                          </span>
-                        </td>
-                        <td className="mono-tag" style={{ padding: '12px 10px', color: '#38bdf8' }}>
-                          {rec.record_hash?.substring(0, 16)}...
-                        </td>
-                        <td className="mono-tag" style={{ padding: '12px 10px', color: '#64748b' }}>
-                          {rec.prev_record_hash?.substring(0, 16)}...
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+            {/* Sub-view: Plain Language Drug Safety */}
+            {activeTab === 'safety' && (
+              <SafetyView
+                patientRecord={patientRecord}
+                onNavigateTab={setActiveTab}
+                selectedLang={selectedLang}
+                onEmergencyCall={handleEmergencyCall}
+                API_BASE={API_BASE}
+              />
+            )}
+          </>
         )}
 
-        {/* View 5: MedGuard AI Copilot */}
-        {activeTab === 'copilot' && (
-          <CopilotChat currentRegimen={prescriptionData?.medications || []} />
-        )}
 
       </main>
+
+      {/* Mobile Bottom Dock Navigation - Only for non-admin users */}
+      {!isAdmin && (
+        <BottomNav
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          selectedLang={selectedLang}
+        />
+      )}
+
+      {/* 21 CFR Part 11 Audit Ledger Modal */}
+      <AuditLedgerModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        API_BASE={API_BASE}
+      />
 
     </div>
   );
