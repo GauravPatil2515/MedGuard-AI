@@ -63,10 +63,37 @@ export default function AppHeader({
           </span>
         </div>
 
-        {/* Center: Role Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', flex: 1, justifyContent: 'center' }}>
+        {/* Center: Role Selector & Desktop Nav Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', flex: 1, justifyContent: 'center', gap: '16px' }}>
+          {/* Desktop Navigation Links */}
+          <div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {[
+              { id: 'home', label: "Today's Pills" },
+              { id: 'scanner', label: "Scan Bottle" },
+              { id: 'caregiver', label: "Family Caregiver" }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab && setActiveTab(tab.id)}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '0.85rem',
+                  fontWeight: activeTab === tab.id ? 700 : 500,
+                  background: activeTab === tab.id ? 'var(--mg-accent-soft)' : 'transparent',
+                  color: activeTab === tab.id ? 'var(--mg-primary)' : 'var(--mg-text-muted)',
+                  border: activeTab === tab.id ? '1px solid var(--mg-accent-border)' : '1px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.16s ease'
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           {roleSelector}
         </div>
+
 
         {/* Right: Language Pills + Emergency + Patient Info */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
