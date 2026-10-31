@@ -21,8 +21,26 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path)
+except ImportError:
+    # Manual fallback parser if python-dotenv not installed
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    if _env_path.exists():
+        with open(_env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip())
+
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
+
 
 from services.drug_dictionary import DRUG_DATABASE, normalize_drug_name
 from services.safety_engine import MultiDrugSafetyEngine

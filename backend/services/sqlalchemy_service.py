@@ -577,14 +577,15 @@ def seed_demo_data_sqlalchemy():
                 patient_id="patient_mrs_kulkarni_01",
                 brand_name=brand,
                 generic_name=generic,
-                dosage=dose,
+                dose=dose,
                 frequency=freq,
-                scheduled_times=json.dumps(times),
+                scheduled_times=times,
                 criticality=crit,
                 food_instruction=meal,
                 remaining_pills=30,
                 is_active=True
             )
+
             session.add(schedule)
         
         session.commit()
