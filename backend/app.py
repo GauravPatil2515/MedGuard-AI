@@ -45,6 +45,7 @@ from services.auth_service import (
     decode_token, require_auth
 )
 from services.notification_service import NotificationService
+from services.firebase_service import FirebaseRealtimeService
 from models.db_models import init_db as init_sqlalchemy_db
 
 app = Flask(__name__)
@@ -55,9 +56,11 @@ DB_PATH = Path(__file__).resolve().parent / "medguard_audit.db"
 audit_service = AuditTrailService(db_path=DB_PATH)
 safety_engine = MultiDrugSafetyEngine()
 notification_service = NotificationService()
+firebase_service = FirebaseRealtimeService()
 
 # Initialize SQLAlchemy database
 try:
+
     init_database()
     init_sqlalchemy_db()
 except Exception as e:
@@ -411,6 +414,17 @@ def log_adherence_dose():
     except Exception as e:
         app.logger.warning(f"Failed to log dose event to SQLAlchemy: {e}")
 
+    # Synchronize to Firebase Realtime Database
+    try:
+        firebase_service.update_patient_status(patient_id, {
+            "last_drug": drug_name,
+            "last_status": status,
+            "verification_type": verification_type,
+            "criticality": criticality
+        })
+    except Exception as e:
+        app.logger.warning(f"Firebase status sync notice: {e}")
+
     # Broadcast to all connected caregivers if critical missed dose
     if is_critical_miss:
         alert_payload = {
@@ -430,6 +444,12 @@ def log_adherence_dose():
             drug_name=drug_name,
             criticality=criticality
         )
+        # Push instant alert banner to Firebase RTDB for caregiver mobile/web listeners
+        try:
+            firebase_service.push_caregiver_alert(patient_id, alert_payload)
+        except Exception as e:
+            app.logger.warning(f"Firebase caregiver alert push notice: {e}")
+
 
     return jsonify({
         "success": True,
