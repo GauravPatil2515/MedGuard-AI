@@ -10,13 +10,39 @@ export default function CaregiverView({
   patientRecord, 
   onNavigateTab,
   selectedLang = 'mr',
-  onEmergencyCall
+  onEmergencyCall,
+  patientData = null
 }) {
   const [patientCalled, setPatientCalled] = useState(false);
   const [doctorNotified, setDoctorNotified] = useState(false);
+  const [caregiverInfo, setCaregiverInfo] = useState({
+    name: "Rahul Kulkarni",
+    relation: "Son",
+    phone: "+91 98200 11223",
+    email: "rahul.kulkarni@example.com"
+  });
 
   const todayDoses = patientRecord?.todayDoses || [];
   const adherenceList = patientRecord?.adherenceSummary || [];
+
+  // Fetch dynamic caregiver profile from backend API if available
+  React.useEffect(() => {
+    const pid = patientRecord?.patientId || "patient_mrs_kulkarni_01";
+    fetch(`${API_BASE}/patients/${pid}/caregivers`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && Array.isArray(data) && data.length > 0) {
+          setCaregiverInfo({
+            name: data[0].name || "Rahul Kulkarni",
+            relation: data[0].relation || "Primary Caregiver",
+            phone: data[0].phone || "+91 98200 11223",
+            email: data[0].email || "caregiver@medguard.ai"
+          });
+        }
+      })
+      .catch(() => {});
+  }, [patientRecord?.patientId]);
+
 
   // Check if any high-priority dose is marked MISSED
   const missedDose = todayDoses.find(d => d.status === 'MISSED' && d.criticality === 'HIGH');
@@ -87,24 +113,27 @@ export default function CaregiverView({
           <div className="mg-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{
               width: '56px', height: '56px', borderRadius: '50%',
-              background: 'var(--mg-primary)', color: '#ffffff',
-              fontWeight: 700, fontSize: '1.3rem',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
+              background: 'linear-gradient(135deg, var(--mg-primary) 0%, var(--mg-accent) 100%)', 
+              color: '#ffffff',
+              fontWeight: 800, fontSize: '1.25rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(13, 56, 44, 0.2)'
             }}>
-              RK
+              {caregiverInfo.name ? caregiverInfo.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'CG'}
             </div>
             <div style={{ flex: 1 }}>
               <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--mg-text-main)' }}>
-                Rahul Kulkarni
+                {caregiverInfo.name}
               </h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--mg-text-muted)', fontSize: '0.85rem' }}>
-                <span>Primary Caregiver (Son)</span>
+                <span>{caregiverInfo.relation}</span>
                 <span>•</span>
-                <span>+91 98200 11223</span>
+                <span>{caregiverInfo.phone}</span>
               </div>
             </div>
             <StatusBadge type="success" label="Connected" />
           </div>
+
 
           {/* Emergency Alert Banner */}
           {(missedDose || anyMissedDose) ? (
