@@ -62,15 +62,33 @@ export default function App() {
     if (roleParam === 'admin' && !isLoggedIn) {
       login(ROLES.ADMIN, { name: 'Pharmacist Admin' });
     } else if (!isLoggedIn) {
-      login(ROLES.USER, { name: 'Mrs. Kulkarni' });
+      login(ROLES.USER, { name: 'Patient' });
     }
   }, []);
 
-  // 1. Initial Load: Load local encrypted record and sync backend if available
+  // 1. Initial Load: Load from backend API with fallback to local encrypted record
   useEffect(() => {
     async function init() {
+      const pid = 'patient_mrs_kulkarni_01';
       try {
-        const record = await loadPatientRecord('patient_mrs_kulkarni_01');
+        // Fetch real patient profile from backend
+        const pRes = await fetch(`${API_BASE}/patients/${pid}`);
+        if (pRes.ok) {
+          const pInfo = await pRes.json();
+          if (pInfo && pInfo.name) {
+            setPatientData({
+              patient_name: pInfo.name,
+              age: pInfo.age || 68,
+              diagnosis: pInfo.diagnosis || "Cardiovascular Health Management"
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Backend patient fetch notice:", err.message);
+      }
+
+      try {
+        const record = await loadPatientRecord(pid);
         setPatientRecord(record);
       } catch (e) {
         console.error("Failed to load patient record:", e);
@@ -78,10 +96,10 @@ export default function App() {
         setLoadingRecord(false);
       }
       checkHealth();
-      loadBackendPreset('mrs_kulkarni_cardiac');
     }
     init();
   }, []);
+
 
   // 2. Dual Real-Time Telemetry: SSE + Firebase Realtime Database
   useEffect(() => {

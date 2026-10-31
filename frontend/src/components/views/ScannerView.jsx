@@ -40,7 +40,8 @@ export default function ScannerView({
   const presets = [
     {
       id: 'sunita_cardiac',
-      name: 'Mrs. Sunita Kulkarni (Cardiac Routine)',
+      name: 'Cardiovascular Regimen (Atrial Fibrillation)',
+
       icon: Heart,
       drugs: [
         { drugName: 'Warfarin', dosage: '5mg', frequency: 'OD (Once Daily)', timesOfDay: ['20:00'], condition: 'Atrial Fibrillation', prescribingDoctor: 'Dr. V. Sharma', criticality: 'HIGH' },

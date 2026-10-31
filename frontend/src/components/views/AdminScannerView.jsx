@@ -61,10 +61,26 @@ export default function AdminScannerView({
   }, []);
 
   const loadDatabase = async () => {
-    await seedDemoMedicines();
+    try {
+      const res = await fetch(`${API_BASE}/medicines`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.medicines) && data.medicines.length > 0) {
+          setMedicineDB(data.medicines);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Backend medicine fetch fallback to IndexedDB:", e);
+    }
     const meds = await getAllMedicines();
-    setMedicineDB(meds);
+    if (!meds || meds.length === 0) {
+      await seedDemoMedicines();
+    }
+    const finalMeds = await getAllMedicines();
+    setMedicineDB(finalMeds);
   };
+
 
   const handleSearch = async (query) => {
     setSearchQuery(query);
