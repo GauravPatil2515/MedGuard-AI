@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 
 export default function ScreenPatientHome({
-  patientName = "Ms. Atharva",
+  patientName = "Mrs. Sumitra Kulkarni",
   patientAge = 68,
   diagnosis = "Post-CABG • Atrial Fibrillation",
   onNavigate,

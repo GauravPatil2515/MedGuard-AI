@@ -1,56 +1,65 @@
-import React, { useState } from 'react';
-import { Phone, Send, AlertTriangle, CheckCircle2, ShieldCheck, Clock, Heart, Flame, Pill } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Phone, Send, AlertTriangle, CheckCircle2, ShieldCheck, Clock, RefreshCw, Flame, Pill } from 'lucide-react';
 import PageHeader from '../ui/PageHeader';
 import Section from '../ui/Section';
 import StatusBadge from '../ui/StatusBadge';
-
-const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+import { api } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function CaregiverView({ 
-  patientRecord, 
   onNavigateTab,
   selectedLang = 'mr',
   onEmergencyCall,
-  patientData = null
 }) {
+  const { user } = useAuth();
+  const patientId = user?.patient_id || user?.id || 'patient_mrs_kulkarni_01';
+
   const [patientCalled, setPatientCalled] = useState(false);
   const [doctorNotified, setDoctorNotified] = useState(false);
-  const [caregiverInfo, setCaregiverInfo] = useState({
-    name: "Rahul Kulkarni",
-    relation: "Son",
-    phone: "+91 98200 11223",
-    email: "rahul.kulkarni@example.com"
-  });
+  const [caregiverInfo, setCaregiverInfo] = useState(null);
+  const [todayDoses, setTodayDoses] = useState([]);
+  const [adherenceList, setAdherenceList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const todayDoses = patientRecord?.todayDoses || [];
-  const adherenceList = patientRecord?.adherenceSummary || [];
+  useEffect(() => {
+    if (!patientId) {
+      setLoading(false);
+      return;
+    }
 
-  // Fetch dynamic caregiver profile from backend API if available
-  React.useEffect(() => {
-    const pid = patientRecord?.patientId || "patient_mrs_kulkarni_01";
-    fetch(`${API_BASE}/patients/${pid}/caregivers`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data && Array.isArray(data) && data.length > 0) {
+    Promise.all([
+      api.getTodaysSchedule(patientId).catch(() => []),
+      api.getAdherence(patientId, 30).catch(() => null),
+      api.getCaregivers(patientId).catch(() => []),
+    ])
+      .then(([doses, adherence, caregivers]) => {
+        setTodayDoses(doses || []);
+        setAdherenceList(adherence ? [{
+          treatmentId: 'overall',
+          drugName: 'All Medications',
+          dosesTaken: adherence.taken,
+          totalScheduled: adherence.total_doses,
+          percentTaken: adherence.adherence_rate,
+          currentStreak: 0,
+        }] : []);
+        if (caregivers && caregivers.length > 0) {
           setCaregiverInfo({
-            name: data[0].name || "Rahul Kulkarni",
-            relation: data[0].relation || "Primary Caregiver",
-            phone: data[0].phone || "+91 98200 11223",
-            email: data[0].email || "caregiver@medguard.ai"
+            name: caregivers[0].name || 'Primary Caregiver',
+            relation: caregivers[0].relation || 'Family',
+            phone: caregivers[0].phone || '',
+            email: caregivers[0].email || '',
           });
         }
       })
-      .catch(() => {});
-  }, [patientRecord?.patientId]);
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [patientId]);
 
-
-  // Check if any high-priority dose is marked MISSED
   const missedDose = todayDoses.find(d => d.status === 'MISSED' && d.criticality === 'HIGH');
   const anyMissedDose = todayDoses.find(d => d.status === 'MISSED');
-  const pendingDoses = todayDoses.filter(d => d.status === 'PENDING');
+  const pendingDoses = todayDoses.filter(d => d.status === 'PENDING' || d.status === 'SCHEDULED');
   const takenDoses = todayDoses.filter(d => d.status === 'TAKEN');
 
-  // Calculate overall streak
   const avgAdherence = adherenceList.length > 0 
     ? Math.round(adherenceList.reduce((sum, a) => sum + (a.percentTaken || 0), 0) / adherenceList.length)
     : 100;
@@ -64,15 +73,8 @@ export default function CaregiverView({
   const handleNotifyDoctor = async () => {
     setDoctorNotified(true);
     try {
-      await fetch(`${API_BASE}/caregiver/notify-risk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patient_id: "patient_mrs_kulkarni_01",
-          max_severity: "High",
-          reason: anyMissedDose ? `Missed dose of ${anyMissedDose.drugName}` : "Caregiver check-in requested"
-        })
-      });
+      await api.notifyRisk(patientId || "patient_mrs_kulkarni_01", 
+        anyMissedDose ? "High" : "Moderate");
     } catch {}
     setTimeout(() => setDoctorNotified(false), 5000);
   };
@@ -89,16 +91,30 @@ export default function CaregiverView({
     return 'Needs Attention';
   };
 
+  if (loading) {
+    return (
+      <div style={{ 
+        minHeight: '300px', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        gap: '16px'
+      }}>
+        <RefreshCw size={40} className="animate-spin" style={{ color: 'var(--mg-primary)' }} />
+        <p style={{ color: 'var(--mg-text-muted)' }}>Loading caregiver data...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* Page Header */}
       <PageHeader
         title="Family Caregiver"
         subtitle="Monitor medication adherence and stay connected"
       />
 
-      {/* Main Grid */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
@@ -106,10 +122,8 @@ export default function CaregiverView({
         alignItems: 'start'
       }}>
         
-        {/* Left Column: Caregiver Profile & Emergency Actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* Caregiver Profile Card */}
           <div className="mg-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{
               width: '56px', height: '56px', borderRadius: '50%',
@@ -119,23 +133,22 @@ export default function CaregiverView({
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(13, 56, 44, 0.2)'
             }}>
-              {caregiverInfo.name ? caregiverInfo.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'CG'}
+              {caregiverInfo?.name ? caregiverInfo.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'CG'}
             </div>
             <div style={{ flex: 1 }}>
               <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--mg-text-main)' }}>
-                {caregiverInfo.name}
+                {caregiverInfo?.name || 'Primary Caregiver'}
               </h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--mg-text-muted)', fontSize: '0.85rem' }}>
-                <span>{caregiverInfo.relation}</span>
-                <span>•</span>
-                <span>{caregiverInfo.phone}</span>
+                <span>{caregiverInfo?.relation || 'Family'}</span>
+                {caregiverInfo?.phone && (
+                  <><span>•</span><span>{caregiverInfo.phone}</span></>
+                )}
               </div>
             </div>
             <StatusBadge type="success" label="Connected" />
           </div>
 
-
-          {/* Emergency Alert Banner */}
           {(missedDose || anyMissedDose) ? (
             <div className="mg-card" style={{
               padding: '20px',
@@ -162,13 +175,12 @@ export default function CaregiverView({
                     <StatusBadge type="danger" label="Action Needed" />
                   </div>
                   <p style={{ margin: '6px 0 0 0', color: '#b91c1c', fontSize: '0.95rem', lineHeight: 1.5 }}>
-                    <strong>{(missedDose || anyMissedDose).drugName} {(missedDose || anyMissedDose).dosage}</strong> was scheduled at <strong>{(missedDose || anyMissedDose).scheduledTime}</strong> but not taken. 
+                    <strong>{(missedDose || anyMissedDose).drug_name || (missedDose || anyMissedDose).drugName} {(missedDose || anyMissedDose).dosage}</strong> was scheduled at <strong>{(missedDose || anyMissedDose).scheduled_time || (missedDose || anyMissedDose).scheduledTime}</strong> but not taken. 
                     {missedDose ? 'This is a critical medication — contact immediately.' : 'Please check in with the patient.'}
                   </p>
                 </div>
               </div>
 
-              {/* Emergency Action Buttons - Large and Prominent */}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <button
                   onClick={handleCallPatient}
@@ -224,7 +236,6 @@ export default function CaregiverView({
             </div>
           )}
 
-          {/* Quick Stats Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
             <div className="mg-card" style={{ padding: '16px', textAlign: 'center' }}>
               <div style={{ 
@@ -263,10 +274,8 @@ export default function CaregiverView({
 
         </div>
 
-        {/* Right Column: Medication Details & Activity */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* Per-Medication Adherence */}
           <Section title="Medication Adherence" subtitle="Per-medication tracking">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {adherenceList.map(item => (
@@ -308,13 +317,12 @@ export default function CaregiverView({
             </div>
           </Section>
 
-          {/* Today's Activity Log */}
           <Section title="Today's Activity" subtitle="Real-time dose log">
             <div className="mg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {todayDoses.length > 0 ? (
                 todayDoses.map((dose, idx) => (
                   <div 
-                    key={dose.id}
+                    key={dose.id || dose.schedule_id + idx}
                     style={{
                       display: 'flex', gap: '12px', alignItems: 'center',
                       paddingBottom: idx < todayDoses.length - 1 ? '12px' : '0',
@@ -332,10 +340,10 @@ export default function CaregiverView({
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
                         <strong style={{ fontSize: '0.9rem', color: dose.status === 'MISSED' ? '#991b1b' : 'var(--mg-text-main)' }}>
-                          {dose.drugName} {dose.dosage}
+                          {dose.drug_name || dose.drugName} {dose.dosage}
                         </strong>
                         <span style={{ fontSize: '0.8rem', color: 'var(--mg-text-muted)', fontWeight: 500 }}>
-                          {dose.scheduledTime}
+                          {dose.scheduled_time || dose.scheduledTime}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--mg-text-muted)', marginTop: '2px' }}>
@@ -353,7 +361,6 @@ export default function CaregiverView({
             </div>
           </Section>
 
-          {/* Verification Note */}
           <div style={{
             background: '#f8fafc',
             border: '1px solid var(--mg-card-border)',

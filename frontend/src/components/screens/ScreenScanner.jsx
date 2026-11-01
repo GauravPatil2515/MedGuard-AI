@@ -133,7 +133,7 @@ export default function ScreenScanner({ onBack, onCompleteScan, API_BASE = "http
             <div style={{ fontWeight: 800, borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '6px', color: '#0f172a' }}>
               DR. R.K. SHARMA, MD (CARDIOLOGY)
             </div>
-            <div>Pt: Ms. Atharva (68F)  Date: 26/09/2026</div>
+            <div>Pt: Mrs. Sumitra Kulkarni (68F)  Date: 26/09/2026</div>
             <div style={{ marginTop: '8px', color: '#1e293b', fontWeight: 600 }}>
               Rx:<br />
               1. Tab Ecosprin 75mg OD (breakfast)<br />

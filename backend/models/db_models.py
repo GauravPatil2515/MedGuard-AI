@@ -15,6 +15,7 @@ Models:
 
 import os
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
@@ -131,6 +132,9 @@ class MedicationSchedule(Base):
     criticality = Column(SQLEnum(CriticalityLevel), default=CriticalityLevel.MEDIUM, index=True)
     food_instruction = Column(String(100), default="AFTER_FOOD")
     remaining_pills = Column(Integer, default=30)
+    child_resistant = Column(Boolean, default=True)
+    cap_lock_type = Column(String(50), default="PUSH_AND_TURN")
+    lock_verified = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -190,7 +194,10 @@ class AuditRecord(Base):
 
 
 def get_db_engine(db_url: Optional[str] = None):
-    url = db_url or os.getenv("DATABASE_URL", "sqlite:///medguard_audit.db")
+    url = db_url or os.getenv("DATABASE_URL")
+    if not url or url.strip() == "sqlite:///medguard_audit.db":
+        canonical_path = Path(__file__).resolve().parent.parent / "medguard_audit.db"
+        url = f"sqlite:///{canonical_path}"
     return create_engine(url, echo=False)
 
 
@@ -198,4 +205,20 @@ def init_db(engine=None):
     if engine is None:
         engine = get_db_engine()
     Base.metadata.create_all(bind=engine)
+
+    # Safe auto-migration for SQLite to support Pillar 1 fields on existing DB
+    try:
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            columns = [row[1] for row in conn.execute(text("PRAGMA table_info(medication_schedules)")).fetchall()]
+            if columns:
+                if "child_resistant" not in columns:
+                    conn.execute(text("ALTER TABLE medication_schedules ADD COLUMN child_resistant BOOLEAN DEFAULT 1"))
+                if "cap_lock_type" not in columns:
+                    conn.execute(text("ALTER TABLE medication_schedules ADD COLUMN cap_lock_type VARCHAR(50) DEFAULT 'PUSH_AND_TURN'"))
+                if "lock_verified" not in columns:
+                    conn.execute(text("ALTER TABLE medication_schedules ADD COLUMN lock_verified BOOLEAN DEFAULT 1"))
+                conn.commit()
+    except Exception:
+        pass
     return engine

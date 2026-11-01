@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 
 PRESET_PRESCRIPTIONS: Dict[str, Dict[str, Any]] = {
     "mrs_kulkarni_cardiac": {
-        "patient_name": "Ms. Atharva",
+        "patient_name": "Mrs. Sumitra Kulkarni",
         "age": 68,
         "diagnosis": "Post-CABG, Atrial Fibrillation, Hypertension",
         "doctor_notes": "Follow anticoagulant regimen strictly. Avoid OTC pain meds without consultation.",

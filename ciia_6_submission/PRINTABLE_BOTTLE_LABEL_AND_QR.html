@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SAFE CAP⁺ — Printable Bottle Label</title>
+  <style>
+    @page {
+      size: 4in 2.5in;
+      margin: 0;
+    }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .print-btn {
+      margin-bottom: 20px;
+      padding: 10px 24px;
+      background: #0e7490;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    .print-btn:hover {
+      background: #0891b2;
+    }
+    .label-card {
+      width: 4in;
+      height: 2.3in;
+      background: #ffffff;
+      border: 2px dashed #0e7490;
+      border-radius: 8px;
+      box-sizing: border-box;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #0e7490;
+      padding-bottom: 4px;
+    }
+    .brand {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0e7490;
+      letter-spacing: 0.5px;
+    }
+    .badge {
+      font-size: 9px;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 75px;
+      gap: 8px;
+      align-items: center;
+      margin: 4px 0;
+    }
+    .med-details {
+      font-size: 10px;
+      color: #1e293b;
+      line-height: 1.35;
+    }
+    .med-name {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .med-dose {
+      font-size: 11px;
+      font-weight: 700;
+      color: #ea580c;
+    }
+    .qr-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .qr-svg {
+      width: 70px;
+      height: 70px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 2px;
+    }
+    .qr-caption {
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #0e7490;
+      margin-top: 2px;
+    }
+    .footer-bar {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8px;
+      color: #64748b;
+    }
+    .warning-text {
+      color: #b91c1c;
+      font-weight: 700;
+      font-size: 8px;
+    }
+    @media print {
+      body {
+        background: transparent;
+        padding: 0;
+      }
+      .print-btn, .instructions {
+        display: none;
+      }
+      .label-card {
+        border: 1px solid #000;
+        box-shadow: none;
+      }
+    }
+    .instructions {
+      margin-top: 15px;
+      max-width: 4in;
+      font-size: 11px;
+      color: #475569;
+      line-height: 1.4;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <button class="print-btn" onclick="window.print()">🖨️ Print Prescription Bottle Label (4" x 2.3")</button>
+
+  <!-- Physical Bottle Label Container -->
+  <div class="label-card">
+    <div class="header-bar">
+      <div class="brand">SAFE CAP⁺ <span style="font-size:10px; font-weight:normal; color:#475569;">| MedGuard AI</span></div>
+      <div class="badge">CHILD-RESISTANT CAP</div>
+    </div>
+
+    <div class="content-grid">
+      <div class="med-details">
+        <div style="font-size: 9px; color:#64748b; text-transform:uppercase;">Rx #MG-2026-8841</div>
+        <div class="med-name">Warfarin Sodium (Coumadin)</div>
+        <div class="med-dose">5 mg Oral Tablet — Night (9:00 PM)</div>
+        <div style="margin-top:2px;"><b>Patient:</b> Mrs. Sumitra Kulkarni (68 Y / F)</div>
+        <div><b>Instructions:</b> Take strictly with water. Avoid skipping.</div>
+        <div class="warning-text">⚠️ High Cardiotoxicity & Bleeding Risk with OTC NSAIDs</div>
+      </div>
+
+      <div class="qr-container">
+        <!-- SVG QR Mockup representing preset scan -->
+        <svg class="qr-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <!-- Outer border -->
+          <rect width="100" height="100" fill="#fff" />
+          <!-- Top Left Finder Pattern -->
+          <rect x="5" y="5" width="28" height="28" fill="#0e7490" />
+          <rect x="9" y="9" width="20" height="20" fill="#fff" />
+          <rect x="13" y="13" width="12" height="12" fill="#0e7490" />
+          <!-- Top Right Finder Pattern -->
+          <rect x="67" y="5" width="28" height="28" fill="#0e7490" />
+          <rect x="71" y="9" width="20" height="20" fill="#fff" />
+          <rect x="75" y="13" width="12" height="12" fill="#0e7490" />
+          <!-- Bottom Left Finder Pattern -->
+          <rect x="5" y="67" width="28" height="28" fill="#0e7490" />
+          <rect x="9" y="71" width="20" height="20" fill="#fff" />
+          <rect x="13" y="75" width="12" height="12" fill="#0e7490" />
+          <!-- Data Elements -->
+          <rect x="38" y="10" width="8" height="8" fill="#0e7490" />
+          <rect x="50" y="15" width="8" height="8" fill="#0e7490" />
+          <rect x="38" y="25" width="6" height="6" fill="#0e7490" />
+          <rect x="48" y="25" width="10" height="6" fill="#0e7490" />
+          <rect x="10" y="38" width="8" height="8" fill="#0e7490" />
+          <rect x="22" y="42" width="6" height="8" fill="#0e7490" />
+          <rect x="35" y="38" width="12" height="12" fill="#0e7490" />
+          <rect x="52" y="38" width="8" height="6" fill="#0e7490" />
+          <rect x="65" y="40" width="12" height="8" fill="#0e7490" />
+          <rect x="82" y="38" width="8" height="12" fill="#0e7490" />
+          <rect x="38" y="55" width="8" height="8" fill="#0e7490" />
+          <rect x="50" y="52" width="10" height="10" fill="#0e7490" />
+          <rect x="65" y="54" width="8" height="8" fill="#0e7490" />
+          <rect x="78" y="55" width="12" height="8" fill="#0e7490" />
+          <rect x="38" y="70" width="8" height="12" fill="#0e7490" />
+          <rect x="50" y="68" width="8" height="8" fill="#0e7490" />
+          <rect x="62" y="70" width="10" height="10" fill="#0e7490" />
+          <rect x="78" y="72" width="12" height="8" fill="#0e7490" />
+          <rect x="45" y="82" width="15" height="8" fill="#0e7490" />
+          <rect x="65" y="85" width="8" height="6" fill="#0e7490" />
+          <rect x="80" y="85" width="10" height="6" fill="#0e7490" />
+        </svg>
+        <div class="qr-caption">1-SCAN ONBOARDING</div>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <div><b>Audio:</b> 🔊 Marathi / Hindi / English</div>
+      <div><b>Batch:</b> MG-702X | Exp: 12/2028</div>
+      <div>21 CFR Part 11 Verified</div>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <b>Exhibition Setup Tip:</b> Print this label, cut along the dashed line, and tape it around an empty child-resistant pill bottle (or amber pharmacy container). Keep this bottle on your exhibition table at Nehru Science Centre.
+  </div>
+
+</body>
+</html>

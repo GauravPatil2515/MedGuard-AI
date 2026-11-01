@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Plus, Check, X, Pill, AlertCircle, ShieldAlert, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 
-const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+import { API_BASE } from './lib/api';
+import { syncDoseToFirebase, syncBottleInventoryToFirebase } from './lib/firebase';
 
 export default function ScheduleManager({ patientId = 'patient_mrs_kulkarni_01', onDoseUpdated }) {
   const [todaySchedule, setTodaySchedule] = useState([]);
@@ -68,6 +69,17 @@ export default function ScheduleManager({ patientId = 'patient_mrs_kulkarni_01',
       if (res.ok) {
         fetchData();
         if (onDoseUpdated) onDoseUpdated();
+
+        // Real-time Firebase Realtime Database sync
+        syncDoseToFirebase(patientId, {
+          patient_id: patientId,
+          drug_name: doseItem.drug_name,
+          schedule_id: doseItem.schedule_id,
+          scheduled_time: doseItem.scheduled_time,
+          status: status,
+          criticality: isCritical ? 'HIGH' : 'MEDIUM',
+          missed_reason: reason
+        });
       }
     } catch (err) {
       console.error('Error recording dose:', err);

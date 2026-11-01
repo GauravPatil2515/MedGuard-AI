@@ -73,6 +73,10 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+# Alias for backwards compatibility
+verify_token = decode_token
+
+
 def require_auth(allowed_roles: Optional[List[str]] = None):
     """Decorator to enforce JWT authentication and RBAC roles on Flask routes."""
     def decorator(fn):

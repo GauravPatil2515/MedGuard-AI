@@ -4,7 +4,7 @@ import { Shield, Activity, Camera, Calendar, Flame, Users, Bot, Volume2 } from '
 export default function Header({ 
   activeTab, 
   setActiveTab, 
-  patientName = 'Ms. Atharva', 
+  patientName = 'Mrs. Sumitra Kulkarni', 
   patientAge = 68,
   selectedLang,
   setSelectedLang,

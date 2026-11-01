@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, Send, Sparkles, AlertTriangle, ShieldCheck, Camera, FileText, CheckCircle2 } from 'lucide-react';
 
-const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+import { API_BASE } from './lib/api';
 
 export default function CopilotChat({ currentRegimen = [] }) {
   const [messages, setMessages] = useState([

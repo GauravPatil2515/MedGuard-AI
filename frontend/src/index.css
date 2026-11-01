@@ -274,14 +274,14 @@ body {
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 28px 20px;
+  padding: 28px 20px 100px 20px;
   flex: 1;
   box-sizing: border-box;
 }
 
 @media (max-width: 768px) {
   .app-shell {
-    padding: 16px 14px 100px 14px; /* Extra clearance for elevated dock button */
+    padding: 16px 14px calc(115px + env(safe-area-inset-bottom, 16px)) 14px !important; /* Full clearance for elevated mobile dock */
   }
   .desktop-only {
     display: none !important;
@@ -294,9 +294,66 @@ body {
   }
 }
 
+/* Hide scrollbars while allowing touch/wheel scrolling */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;             /* Chrome, Safari, Opera */
+}
+
 /* Safe area support for notch and home bars */
 @supports(padding: env(safe-area-inset-bottom)) {
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Caregiver Dashboard Responsive Grid */
+.caregiver-main-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+}
+@media (min-width: 900px) {
+  .caregiver-main-grid {
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+  }
+}
+
+/* Admin Scanner Responsive Grid */
+.admin-scanner-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .admin-scanner-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+}
+
+/* Adherence Heatmap Responsive Grid */
+.adherence-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+@media (min-width: 540px) {
+  .adherence-heatmap-grid {
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+  }
+}
+@media (min-width: 860px) {
+  .adherence-heatmap-grid {
+    grid-template-columns: repeat(15, 1fr);
+    gap: 8px;
   }
 }

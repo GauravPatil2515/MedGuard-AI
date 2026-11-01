@@ -118,10 +118,21 @@ def create_patient(
     finally:
         session.close()
 
+def _resolve_patient_id(session, patient_id: str) -> str:
+    if not patient_id:
+        return "patient_mrs_kulkarni_01"
+    p = session.query(Patient).filter(Patient.id == patient_id).first()
+    if not p:
+        p = session.query(Patient).filter(Patient.user_id == patient_id).first()
+    if not p and patient_id in ("usr_demo_patient", "demo", "default", "me"):
+        p = session.query(Patient).filter(Patient.id == "patient_mrs_kulkarni_01").first()
+    return p.id if p else patient_id
+
 def get_patient(patient_id: str) -> Optional[Patient]:
     session = get_session()
     try:
-        return session.query(Patient).filter(Patient.id == patient_id).first()
+        resolved_id = _resolve_patient_id(session, patient_id)
+        return session.query(Patient).filter(Patient.id == resolved_id).first()
     finally:
         session.close()
 
@@ -192,9 +203,10 @@ def link_caregiver(
 def get_patient_caregivers(patient_id: str) -> List[Dict]:
     session = get_session()
     try:
+        resolved_id = _resolve_patient_id(session, patient_id)
         links = session.query(PatientCaregiverLink).options(
             joinedload(PatientCaregiverLink.caregiver)
-        ).filter(PatientCaregiverLink.patient_id == patient_id).all()
+        ).filter(PatientCaregiverLink.patient_id == resolved_id).all()
         
         return [{
             "id": link.caregiver.id,
@@ -270,6 +282,9 @@ def create_schedule(
             criticality=criticality,
             food_instruction=meal_timing,
             remaining_pills=30,
+            child_resistant=True,
+            cap_lock_type="PUSH_AND_TURN",
+            lock_verified=True,
             is_active=True
         )
         session.add(schedule)
@@ -283,6 +298,9 @@ def create_schedule(
             "dosage": schedule.dose,
             "frequency": schedule.frequency,
             "dose_times": freq_info["dose_times"],
+            "child_resistant": schedule.child_resistant,
+            "cap_lock_type": schedule.cap_lock_type,
+            "lock_verified": schedule.lock_verified,
             "start_date": start,
             "end_date": end_dt,
             "duration_days": duration_days
@@ -290,28 +308,55 @@ def create_schedule(
     finally:
         session.close()
 
-def get_patient_schedules(patient_id: str) -> List[MedicationSchedule]:
+def get_patient_schedules(patient_id: str) -> List[Dict]:
     session = get_session()
     try:
-        return session.query(MedicationSchedule).filter(
-            MedicationSchedule.patient_id == patient_id,
+        resolved_id = _resolve_patient_id(session, patient_id)
+        schedules = session.query(MedicationSchedule).filter(
+            MedicationSchedule.patient_id == resolved_id,
             MedicationSchedule.is_active == True
         ).order_by(MedicationSchedule.created_at.desc()).all()
+        
+        result = []
+        for s in schedules:
+            times = s.scheduled_times if isinstance(s.scheduled_times, list) else json.loads(s.scheduled_times or "[]")
+            result.append({
+                "id": s.id,
+                "schedule_id": s.id,
+                "patient_id": s.patient_id,
+                "drug_name": s.brand_name,
+                "brand_name": s.brand_name,
+                "generic_name": s.generic_name or s.brand_name,
+                "dosage": s.dose,
+                "dose": s.dose,
+                "frequency": s.frequency,
+                "scheduled_times": times,
+                "criticality": s.criticality.value if hasattr(s.criticality, "value") else str(s.criticality),
+                "food_instruction": s.food_instruction,
+                "remaining_pills": s.remaining_pills,
+                "child_resistant": getattr(s, "child_resistant", True),
+                "cap_lock_type": getattr(s, "cap_lock_type", "PUSH_AND_TURN"),
+                "lock_verified": getattr(s, "lock_verified", True),
+                "is_active": s.is_active,
+                "created_at": s.created_at.isoformat() if s.created_at else None
+            })
+        return result
     finally:
         session.close()
 
 def get_todays_schedule(patient_id: str) -> List[Dict]:
     session = get_session()
     try:
+        resolved_id = _resolve_patient_id(session, patient_id)
         today = datetime.now().strftime("%Y-%m-%d")
         schedules = session.query(MedicationSchedule).filter(
-            MedicationSchedule.patient_id == patient_id,
+            MedicationSchedule.patient_id == resolved_id,
             MedicationSchedule.is_active == True
         ).all()
         
         # Get today's dose events
         dose_events = session.query(DoseEvent).filter(
-            DoseEvent.patient_id == patient_id,
+            DoseEvent.patient_id == resolved_id,
             DoseEvent.scheduled_time.like(f"{today}%")
         ).all()
         
@@ -319,21 +364,19 @@ def get_todays_schedule(patient_id: str) -> List[Dict]:
         
         result = []
         for sched in schedules:
-            if sched.start_date and sched.end_date:
-                if not (sched.start_date <= today <= sched.end_date):
-                    continue
-            dose_times = json.loads(sched.scheduled_times or "[]")
-            for dose_time in dose_times:
+            times = sched.scheduled_times if isinstance(sched.scheduled_times, list) else json.loads(sched.scheduled_times or "[]")
+            for dose_time in times:
                 scheduled_at = f"{today}T{dose_time}:00"
                 key = f"{sched.id}_{scheduled_at}"
                 result.append({
+                    "id": sched.id,
                     "schedule_id": sched.id,
                     "drug_name": sched.brand_name,
                     "dosage": sched.dose,
                     "scheduled_time": scheduled_at,
                     "meal_timing": sched.food_instruction,
-                    "criticality": sched.criticality.value,
-                    "status": DoseStatus.TAKEN.value if key in taken_set else DoseStatus.PENDING.value
+                    "criticality": sched.criticality.value if hasattr(sched.criticality, "value") else str(sched.criticality),
+                    "status": DoseStatus.TAKEN.value if key in taken_set else DoseStatus.SCHEDULED.value
                 })
         return sorted(result, key=lambda x: x["scheduled_time"])
     finally:
@@ -345,38 +388,91 @@ def get_todays_schedule(patient_id: str) -> List[Dict]:
 
 def log_dose_event(
     patient_id: str,
-    schedule_id: str,
-    drug_name: str,
-    scheduled_time: str,
-    status: DoseStatus,
+    schedule_id: Optional[str] = None,
+    drug_name: str = "Medication",
+    scheduled_time: Optional[str] = None,
+    status: Any = DoseStatus.TAKEN,
     verification_method: str = "ONE_CLICK",
-    notes: Optional[str] = None
-) -> DoseEvent:
+    notes: Optional[str] = None,
+    missed_reason: Optional[str] = None
+) -> Dict[str, Any]:
     session = get_session()
     try:
+        # Convert status string to enum if needed
+        if isinstance(status, str):
+            status_upper = status.upper()
+            try:
+                status_enum = DoseStatus[status_upper]
+            except KeyError:
+                status_enum = DoseStatus.TAKEN if "TAKEN" in status_upper else DoseStatus.MISSED
+        else:
+            status_enum = status
+
+        final_notes = notes or missed_reason or ""
+        event_time = scheduled_time or datetime.now().isoformat()
+        event_id = _uid()
+
         event = DoseEvent(
-            id=_uid(),
-            schedule_id=schedule_id,
+            id=event_id,
+            schedule_id=schedule_id or "",
             patient_id=patient_id,
-            scheduled_time=scheduled_time,
+            scheduled_time=event_time,
             recorded_at=datetime.now(),
-            status=status,
+            status=status_enum,
             verification_method=verification_method,
-            notes=notes
+            notes=final_notes
         )
         session.add(event)
+
+        remaining_pills = None
+        refill_needed = False
+
+        # Decrement inventory on TAKEN doses (Pillar 4)
+        if status_enum == DoseStatus.TAKEN:
+            schedule = None
+            if schedule_id:
+                schedule = session.query(MedicationSchedule).filter(
+                    MedicationSchedule.id == schedule_id
+                ).first()
+            if not schedule and drug_name:
+                resolved_pid = _resolve_patient_id(session, patient_id)
+                schedule = session.query(MedicationSchedule).filter(
+                    MedicationSchedule.patient_id == resolved_pid,
+                    (MedicationSchedule.brand_name.ilike(f"%{drug_name}%") | 
+                     MedicationSchedule.generic_name.ilike(f"%{drug_name}%")),
+                    MedicationSchedule.is_active == True
+                ).first()
+
+            if schedule:
+                schedule.remaining_pills = max(0, (schedule.remaining_pills if schedule.remaining_pills is not None else 30) - 1)
+                remaining_pills = schedule.remaining_pills
+                refill_needed = schedule.remaining_pills <= 5
+
         session.commit()
-        session.refresh(event)
-        return event
+        
+        return {
+            "id": event_id,
+            "patient_id": patient_id,
+            "schedule_id": schedule_id,
+            "drug_name": drug_name,
+            "scheduled_time": event_time,
+            "status": status_enum.value if hasattr(status_enum, "value") else str(status_enum),
+            "verification_method": verification_method,
+            "notes": final_notes,
+            "remaining_pills": remaining_pills,
+            "refill_needed": refill_needed,
+            "recorded_at": event.recorded_at.isoformat() if event.recorded_at else datetime.now().isoformat()
+        }
     finally:
         session.close()
 
 def get_adherence_summary(patient_id: str, days: int = 30) -> Dict:
     session = get_session()
     try:
+        resolved_id = _resolve_patient_id(session, patient_id)
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         events = session.query(DoseEvent).filter(
-            DoseEvent.patient_id == patient_id,
+            DoseEvent.patient_id == resolved_id,
             DoseEvent.scheduled_time >= since
         ).order_by(DoseEvent.scheduled_time).all()
         
@@ -440,12 +536,31 @@ def save_safety_assessment(
     finally:
         session.close()
 
-def get_patient_safety_assessments(patient_id: str, limit: int = 10) -> List[SafetyAssessment]:
+def get_patient_safety_assessments(patient_id: Optional[str] = None, limit: int = 10) -> List[Dict]:
     session = get_session()
     try:
-        return session.query(SafetyAssessment).filter(
-            SafetyAssessment.patient_id == patient_id
-        ).order_by(SafetyAssessment.created_at.desc()).limit(limit).all()
+        query = session.query(SafetyAssessment)
+        if patient_id:
+            query = query.filter(SafetyAssessment.patient_id == patient_id)
+        assessments = query.order_by(SafetyAssessment.created_at.desc()).limit(limit).all()
+        
+        result = []
+        for a in assessments:
+            drugs = a.drugs_analyzed if isinstance(a.drugs_analyzed, list) else (json.loads(a.drugs_analyzed) if a.drugs_analyzed else [])
+            details = a.details if isinstance(a.details, dict) else (json.loads(a.details) if a.details else {})
+            result.append({
+                "id": a.id,
+                "patient_id": a.patient_id,
+                "drugs_analyzed": drugs,
+                "overall_status": a.overall_status,
+                "interaction_count": a.interaction_count,
+                "herg_cardiotox_prob": a.herg_cardiotox_prob,
+                "conformal_lower_bound": a.conformal_lower_bound,
+                "conformal_upper_bound": a.conformal_upper_bound,
+                "details": details,
+                "created_at": a.created_at.isoformat() if a.created_at else None
+            })
+        return result
     finally:
         session.close()
 
@@ -530,12 +645,49 @@ def seed_demo_data_sqlalchemy():
         # Check if demo patient exists
         existing = session.query(Patient).filter(Patient.id == "patient_mrs_kulkarni_01").first()
         if existing:
+            existing_events = session.query(DoseEvent).filter(DoseEvent.patient_id == "patient_mrs_kulkarni_01").count()
+            if existing_events == 0:
+                now = datetime.now()
+                for day_offset in range(14, 0, -1):
+                    day_date = (now - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+                    session.add(DoseEvent(
+                        id=_uid(),
+                        schedule_id="sched_aspirin",
+                        patient_id="patient_mrs_kulkarni_01",
+                        scheduled_time=f"{day_date}T08:00:00",
+                        recorded_at=now - timedelta(days=day_offset, hours=2),
+                        status=DoseStatus.TAKEN,
+                        verification_method="ONE_CLICK",
+                        notes="Taken after breakfast"
+                    ))
+                    session.add(DoseEvent(
+                        id=_uid(),
+                        schedule_id="sched_metformin",
+                        patient_id="patient_mrs_kulkarni_01",
+                        scheduled_time=f"{day_date}T08:00:00",
+                        recorded_at=now - timedelta(days=day_offset, hours=2),
+                        status=DoseStatus.TAKEN,
+                        verification_method="ONE_CLICK",
+                        notes="Taken with food"
+                    ))
+                    is_missed = (day_offset == 3)
+                    session.add(DoseEvent(
+                        id=_uid(),
+                        schedule_id="sched_warfarin",
+                        patient_id="patient_mrs_kulkarni_01",
+                        scheduled_time=f"{day_date}T20:00:00",
+                        recorded_at=now - timedelta(days=day_offset),
+                        status=DoseStatus.MISSED if is_missed else DoseStatus.TAKEN,
+                        verification_method="ONE_CLICK",
+                        notes="Patient fell asleep early" if is_missed else "Taken after dinner"
+                    ))
+                session.commit()
             return
         
         # Create demo patient
         patient = Patient(
             id="patient_mrs_kulkarni_01",
-            name="Ms. Atharva",
+            name="Mrs. Sumitra Kulkarni",
             age=68,
             diagnosis="Post-MI, Atrial Fibrillation, Type-2 Diabetes",
             phone="+91 98200 11223",
@@ -589,7 +741,49 @@ def seed_demo_data_sqlalchemy():
             session.add(schedule)
         
         session.commit()
-        print("Demo data seeded successfully")
+
+        # Seed 14 days of realistic adherence dose history if not present
+        existing_events = session.query(DoseEvent).filter(DoseEvent.patient_id == "patient_mrs_kulkarni_01").count()
+        if existing_events == 0:
+            now = datetime.now()
+            for day_offset in range(14, 0, -1):
+                day_date = (now - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+                # Morning doses: Aspirin & Metformin
+                session.add(DoseEvent(
+                    id=_uid(),
+                    schedule_id="sched_aspirin",
+                    patient_id="patient_mrs_kulkarni_01",
+                    scheduled_time=f"{day_date}T08:00:00",
+                    recorded_at=now - timedelta(days=day_offset, hours=2),
+                    status=DoseStatus.TAKEN,
+                    verification_method="ONE_CLICK",
+                    notes="Taken after breakfast"
+                ))
+                session.add(DoseEvent(
+                    id=_uid(),
+                    schedule_id="sched_metformin",
+                    patient_id="patient_mrs_kulkarni_01",
+                    scheduled_time=f"{day_date}T08:00:00",
+                    recorded_at=now - timedelta(days=day_offset, hours=2),
+                    status=DoseStatus.TAKEN,
+                    verification_method="ONE_CLICK",
+                    notes="Taken with food"
+                ))
+                # Evening doses: Warfarin & Metformin (missed on day 3 for realism)
+                is_missed = (day_offset == 3)
+                session.add(DoseEvent(
+                    id=_uid(),
+                    schedule_id="sched_warfarin",
+                    patient_id="patient_mrs_kulkarni_01",
+                    scheduled_time=f"{day_date}T20:00:00",
+                    recorded_at=now - timedelta(days=day_offset),
+                    status=DoseStatus.MISSED if is_missed else DoseStatus.TAKEN,
+                    verification_method="ONE_CLICK",
+                    notes="Patient fell asleep early" if is_missed else "Taken after dinner"
+                ))
+            session.commit()
+
+        print("Demo data seeded successfully with adherence history")
     except Exception as e:
         session.rollback()
         print(f"Error seeding demo data: {e}")

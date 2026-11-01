@@ -1,20 +1,27 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 
 // Auth Context
-import { useAuth, ROLES } from './context/AuthContext.jsx';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Unified UI System Components
 import AppHeader from './components/ui/AppHeader';
 import BottomNav from './components/ui/BottomNav';
 import AuditLedgerModal from './components/AuditLedgerModal';
 
-// Views (SAFE CAP+)
+// Views (SAFE CAP+ Complete Clinical Suite)
 import DashboardView from './components/views/DashboardView';
 import ScannerView from './components/views/ScannerView';
 import CaregiverView from './components/views/CaregiverView';
+import CopilotView from './components/views/CopilotView';
 import SafetyView from './components/views/SafetyView';
+import AdherenceView from './components/views/AdherenceView';
+import MedicationsView from './components/views/MedicationsView';
+import MolecularView from './components/views/MolecularView';
+import FdaSignalsView from './components/views/FdaSignalsView';
+import LandingView from './components/views/LandingView';
 import AdminScannerView from './components/views/AdminScannerView';
-
+import LoginPage from './components/LoginPage';
 
 // Unified Reactive Store (On-Device + AES-GCM Encrypted)
 import { 
@@ -23,72 +30,128 @@ import {
   addTreatment
 } from './lib/patientRecordStore';
 
-// Firebase Realtime Service
-import { subscribeToCaregiverAlerts, syncDoseToFirebase } from './lib/firebase';
-
-
 const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
 
-export default function App() {
-  const { user, login, logout, switchRole, isAdmin, isUser, isLoggedIn } = useAuth();
+// Protected Route Component
+function ProtectedRoute({ children, allowedRoles }) {
+  const { user, loading, isAuthenticated } = useAuth();
+  
+  if (loading) {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'var(--mg-canvas)'
+      }}>
+        <div style={{ 
+          width: '48px', height: '48px', borderRadius: '50%',
+          border: '3px solid var(--mg-primary)', borderTopColor: 'transparent',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  
+  return children;
+}
+
+// Public Route (redirects if authenticated)
+function PublicRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'var(--mg-canvas)'
+      }}>
+        <div style={{ 
+          width: '48px', height: '48px', borderRadius: '50%',
+          border: '3px solid var(--mg-primary)', borderTopColor: 'transparent',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+      </div>
+    );
+  }
+  
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+  
+  return children;
+}
+
+// Main App Component with Auth
+function AppContent() {
+  const { user, isAuthenticated, login, logout, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   
   const [activeTab, setActiveTab] = useState('home');
-  const [selectedLang, setSelectedLang] = useState('mr'); // 'mr' | 'hi' | 'en'
+  const [selectedLang, setSelectedLang] = useState('mr');
   const [isBackendHealthy, setIsBackendHealthy] = useState(true);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
-
-  // Single Source of Truth: Unified Reactive Patient Record
-  const [patientRecord, setPatientRecord] = useState(null);
-  const [loadingRecord, setLoadingRecord] = useState(true);
-
-  // Patient Demographic Metadata
-  const [patientData, setPatientData] = useState({
-    patient_name: "Mrs. Kulkarni",
-    age: 68,
-    diagnosis: "Post-CABG • Atrial Fibrillation"
-  });
-
   const [caregiverAlert, setCaregiverAlert] = useState(null);
+
+  // Synchronize activeTab with URL pathname
+  useEffect(() => {
+    const rawPath = location.pathname.replace(/^\//, '');
+    setActiveTab(rawPath || 'home');
+  }, [location.pathname]);
+
+  const handleNavigateTab = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'home') {
+      navigate('/');
+    } else {
+      navigate(`/${tab}`);
+    }
+  };
 
   // Emergency call handler
   const handleEmergencyCall = () => {
     window.location.href = "tel:+919820011223";
   };
 
+  // Load patient record from local store (for backward compat)
+  const [patientRecord, setPatientRecord] = useState(null);
+  const [loadingRecord, setLoadingRecord] = useState(true);
+
+  // Patient Demographic Metadata
+  const [patientData, setPatientData] = useState({
+    patient_name: "Mrs. Sumitra Kulkarni",
+    age: 68,
+    diagnosis: "Post-CABG • Atrial Fibrillation"
+  });
+
   // Check URL for role parameter on load
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const roleParam = urlParams.get('role');
-    if (roleParam === 'admin' && !isLoggedIn) {
-      login(ROLES.ADMIN, { name: 'Pharmacist Admin' });
-    } else if (!isLoggedIn) {
-      login(ROLES.USER, { name: 'Patient' });
-    }
+    // Note: Role switching now happens via login, not URL param
   }, []);
 
-  // 1. Initial Load: Load from backend API with fallback to local encrypted record
+  // 1. Initial Load: Load local encrypted record and sync backend if available
   useEffect(() => {
     async function init() {
-      const pid = 'patient_mrs_kulkarni_01';
       try {
-        // Fetch real patient profile from backend
-        const pRes = await fetch(`${API_BASE}/patients/${pid}`);
-        if (pRes.ok) {
-          const pInfo = await pRes.json();
-          if (pInfo && pInfo.name) {
-            setPatientData({
-              patient_name: pInfo.name,
-              age: pInfo.age || 68,
-              diagnosis: pInfo.diagnosis || "Cardiovascular Health Management"
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Backend patient fetch notice:", err.message);
-      }
-
-      try {
-        const record = await loadPatientRecord(pid);
+        const record = await loadPatientRecord('patient_mrs_kulkarni_01');
         setPatientRecord(record);
       } catch (e) {
         console.error("Failed to load patient record:", e);
@@ -96,12 +159,12 @@ export default function App() {
         setLoadingRecord(false);
       }
       checkHealth();
+      loadBackendPreset('mrs_kulkarni_cardiac');
     }
     init();
   }, []);
 
-
-  // 2. Dual Real-Time Telemetry: SSE + Firebase Realtime Database
+  // 2. Server-Sent Events (SSE) Live Telemetry Stream
   useEffect(() => {
     let eventSource;
     try {
@@ -119,23 +182,10 @@ export default function App() {
     } catch (e) {
       console.warn("SSE connection error", e);
     }
-
-    // Firebase Realtime Database listener for caregiver alerts
-    const unsubscribeFirebase = subscribeToCaregiverAlerts(
-      patientRecord?.patientId || 'patient_mrs_kulkarni_01',
-      (firebaseAlert) => {
-        if (firebaseAlert && (firebaseAlert.type === 'CRITICAL_MISSED_DOSE_ALERT' || firebaseAlert.action_required)) {
-          setCaregiverAlert(firebaseAlert);
-        }
-      }
-    );
-
     return () => {
       if (eventSource) eventSource.close();
-      if (unsubscribeFirebase) unsubscribeFirebase();
     };
-  }, [patientRecord?.patientId]);
-
+  }, []);
 
   const checkHealth = async () => {
     try {
@@ -172,28 +222,22 @@ export default function App() {
       const updated = await logDoseStatus(patientRecord, doseId, status);
       setPatientRecord(updated);
 
-      // Inform backend if connected
       const targetDose = (patientRecord.todayDoses || []).find(d => d.id === doseId);
       if (targetDose) {
-        const payload = {
-          patient_id: patientRecord.patientId || "patient_mrs_kulkarni_01",
-          drug_name: targetDose.drugName,
-          status: status,
-          criticality: targetDose.criticality || "HIGH"
-        };
         fetch(`${API_BASE}/schedules/dose`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            patient_id: patientRecord.patientId || "patient_mrs_kulkarni_01",
+            drug_name: targetDose.drugName,
+            status: status,
+            criticality: targetDose.criticality || "HIGH"
+          })
         }).catch(() => {});
-
-        // Direct Firebase Realtime Database sync
-        syncDoseToFirebase(payload.patient_id, payload);
       }
     } catch (err) {
       console.error("Dose action error:", err);
     }
-
   };
 
   // 4. Central Reactive Action: Add Prescribed Medication & Run Pairwise DDI
@@ -216,7 +260,7 @@ export default function App() {
 
   // Role Selector Component
   const RoleSelector = () => {
-    if (!isLoggedIn) return null;
+    if (!isAuthenticated) return null;
     
     return (
       <div style={{
@@ -224,9 +268,9 @@ export default function App() {
         background: '#f1f5f9', borderRadius: 'var(--radius-full)',
         alignItems: 'center', flexShrink: 0
       }}>
-        <span className="meta-text" style={{ fontSize: '0.75rem', textTransform: 'uppercase' }}>Mode:</span>
+        <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--mg-text-muted)', fontWeight: 600 }}>Mode:</span>
         <button
-          onClick={() => switchRole(ROLES.ADMIN)}
+          onClick={() => window.location.href = '/?role=admin'}
           style={{
             padding: '6px 16px', borderRadius: 'var(--radius-full)',
             fontSize: '0.8rem', fontWeight: 700,
@@ -238,12 +282,12 @@ export default function App() {
           Admin
         </button>
         <button
-          onClick={() => switchRole(ROLES.USER)}
+          onClick={() => window.location.href = '/?role=user'}
           style={{
             padding: '6px 16px', borderRadius: 'var(--radius-full)',
             fontSize: '0.8rem', fontWeight: 700,
-            background: isUser ? 'var(--mg-primary)' : 'transparent',
-            color: isUser ? '#fff' : 'var(--mg-text-muted)',
+            background: !isAdmin ? 'var(--mg-primary)' : 'transparent',
+            color: !isAdmin ? '#fff' : 'var(--mg-text-muted)',
             border: 'none', cursor: 'pointer', transition: 'all 0.2s'
           }}
         >
@@ -253,7 +297,6 @@ export default function App() {
     );
   };
 
-  // Show loading state
   if (loadingRecord) {
     return (
       <div style={{ 
@@ -277,13 +320,22 @@ export default function App() {
     );
   }
 
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <PublicRoute>
+        <LoginPage onLoginSuccess={() => window.location.reload()} />
+      </PublicRoute>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
       {/* Reusable Clean App Header */}
       <AppHeader
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleNavigateTab}
         patientName={patientData.patient_name}
         selectedLang={selectedLang}
         setSelectedLang={setSelectedLang}
@@ -291,12 +343,13 @@ export default function App() {
         criticalAlertCount={criticalAlertCount}
         onEmergencyCall={handleEmergencyCall}
         roleSelector={<RoleSelector />}
+        onOpenAuditLedger={() => setIsAuditModalOpen(true)}
       />
 
       {/* Main Content Area */}
       <main className="app-shell">
         
-        {/* Real-time Caregiver Escalation Banner (when an SSE event arrives) */}
+        {/* Real-time Caregiver Escalation Banner */}
         {caregiverAlert && (
           <div 
             className="mg-card fade-in"
@@ -319,10 +372,9 @@ export default function App() {
                 ⚠️ Caregiver Alert: Missed {caregiverAlert.drug_name} dose
               </strong>
             </div>
-
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={() => { setActiveTab('caregiver'); setCaregiverAlert(null); }}
+                onClick={() => { handleNavigateTab('caregiver'); setCaregiverAlert(null); }}
                 className="btn-primary"
                 style={{ padding: '8px 16px', fontSize: '0.85rem' }}
               >
@@ -341,65 +393,77 @@ export default function App() {
 
         {/* Admin Scanner View - Only visible in Admin mode */}
         {isAdmin && (
-          <AdminScannerView
-            onNavigateTab={setActiveTab}
-            selectedLang={selectedLang}
-            onAddTreatment={handleAddTreatment}
-            API_BASE={API_BASE}
-          />
+          <ProtectedRoute allowedRoles={['ADMIN', 'CLINICIAN']}>
+            <AdminScannerView
+              onNavigateTab={handleNavigateTab}
+              selectedLang={selectedLang}
+              onAddTreatment={handleAddTreatment}
+              API_BASE={API_BASE}
+            />
+          </ProtectedRoute>
         )}
 
-        {/* User Views - General User mode */}
+        {/* User Views - General Clinical Suite */}
         {!isAdmin && (
-          <>
-            {/* Tab 1: Today's Pills (Home) */}
-            {activeTab === 'home' && (
-              <DashboardView
+          <ProtectedRoute>
+            <Routes>
+              <Route path="/" element={<DashboardView
                 patientData={patientData}
                 patientRecord={patientRecord}
-                onNavigateTab={setActiveTab}
+                onNavigateTab={handleNavigateTab}
                 onDoseAction={handleDoseAction}
                 selectedLang={selectedLang}
                 onEmergencyCall={handleEmergencyCall}
                 API_BASE={API_BASE}
-              />
-            )}
-
-            {/* Tab 2: Scan Bottle */}
-            {activeTab === 'scanner' && (
-              <ScannerView
+              />} />
+              <Route path="/scanner" element={<ScannerView
+                onNavigateTab={handleNavigateTab}
+              />} />
+              <Route path="/caregiver" element={<CaregiverView
+                onNavigateTab={handleNavigateTab}
+                selectedLang={selectedLang}
+                onEmergencyCall={handleEmergencyCall}
+              />} />
+              <Route path="/copilot" element={<CopilotView
                 patientRecord={patientRecord}
+                API_BASE={API_BASE}
+              />} />
+              <Route path="/safety" element={<SafetyView
+                patientRecord={patientRecord}
+                onAcknowledgeRisk={() => {}}
+                onNavigateTab={handleNavigateTab}
+                selectedLang={selectedLang}
+                onEmergencyCall={handleEmergencyCall}
+                API_BASE={API_BASE}
+              />} />
+              <Route path="/adherence" element={<AdherenceView
+                onNavigateTab={handleNavigateTab}
+              />} />
+              <Route path="/medications" element={<MedicationsView
+                patientData={patientData}
+                patientRecord={patientRecord}
+                onDoseAction={handleDoseAction}
+                API_BASE={API_BASE}
+              />} />
+              <Route path="/molecular" element={<MolecularView
+                onNavigateTab={handleNavigateTab}
+              />} />
+              <Route path="/fda" element={<FdaSignalsView
+                API_BASE={API_BASE}
+              />} />
+              <Route path="/landing" element={<LandingView
+                onNavigateTab={handleNavigateTab}
+              />} />
+              <Route path="/admin" element={<AdminScannerView
+                onNavigateTab={handleNavigateTab}
+                selectedLang={selectedLang}
                 onAddTreatment={handleAddTreatment}
-                onNavigateTab={setActiveTab}
-                selectedLang={selectedLang}
                 API_BASE={API_BASE}
-              />
-            )}
-
-            {/* Tab 3: Family Caregiver */}
-            {activeTab === 'caregiver' && (
-              <CaregiverView
-                patientRecord={patientRecord}
-                onNavigateTab={setActiveTab}
-                selectedLang={selectedLang}
-                onEmergencyCall={handleEmergencyCall}
-                API_BASE={API_BASE}
-              />
-            )}
-
-            {/* Sub-view: Plain Language Drug Safety */}
-            {activeTab === 'safety' && (
-              <SafetyView
-                patientRecord={patientRecord}
-                onNavigateTab={setActiveTab}
-                selectedLang={selectedLang}
-                onEmergencyCall={handleEmergencyCall}
-                API_BASE={API_BASE}
-              />
-            )}
-          </>
+              />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ProtectedRoute>
         )}
-
 
       </main>
 
@@ -407,8 +471,9 @@ export default function App() {
       {!isAdmin && (
         <BottomNav
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={handleNavigateTab}
           selectedLang={selectedLang}
+          onOpenAuditLedger={() => setIsAuditModalOpen(true)}
         />
       )}
 
@@ -420,5 +485,13 @@ export default function App() {
       />
 
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, CheckCircle2, AlertTriangle, XCircle, Flame, Award, TrendingUp, RefreshCw } from 'lucide-react';
+import { API_BASE } from './lib/api';
 
 export default function AdherenceCalendar({ patientId = 'patient_mrs_kulkarni_01', onDoseUpdated }) {
   const [data, setData] = useState(null);
@@ -9,7 +10,6 @@ export default function AdherenceCalendar({ patientId = 'patient_mrs_kulkarni_01
   const fetchAdherence = React.useCallback(async () => {
     setLoading(true);
     try {
-      const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
       const res = await fetch(`${API_BASE}/patients/${patientId}/adherence?days=30`);
       if (res.ok) {
         const json = await res.json();
@@ -276,11 +276,7 @@ export default function AdherenceCalendar({ patientId = 'patient_mrs_kulkarni_01
         </div>
 
         {/* The Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(15, 1fr)',
-          gap: '8px'
-        }}>
+        <div className="adherence-heatmap-grid">
           {daysList.map((day) => {
             const st = getDayStatus(day.date);
             let bgColor = '#1e293b';

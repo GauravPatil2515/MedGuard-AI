@@ -4,13 +4,14 @@ import PageHeader from '../ui/PageHeader';
 import Section from '../ui/Section';
 import MedicationCard from '../ui/MedicationCard';
 import StatusBadge from '../ui/StatusBadge';
+import { API_BASE as DEFAULT_API_BASE } from '../../lib/api';
 
 export default function MedicationsView({
   patientData,
   patientRecord,
   onRemoveTreatment,
   onDoseAction,
-  API_BASE = "http://localhost:5000/api"
+  API_BASE = DEFAULT_API_BASE
 }) {
   const treatments = (patientRecord?.treatments || []).filter(t => t.status === 'active');
   const [selectedId, setSelectedId] = useState(treatments[0]?.id || null);

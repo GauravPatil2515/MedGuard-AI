@@ -50,6 +50,28 @@ class MedGuardCopilotAgent:
         # Step 2: Run Molecular & Symbolic Safety Engine
         safety_report = self.safety_engine.analyze_regimen(full_regimen_to_test)
         
+        # Deduplicate interactions by sorted drug pair
+        seen_pairs = set()
+        unique_interactions = []
+        for inter in safety_report.get("interactions", []):
+            d_a = inter.get("drug_a", "").lower()
+            d_b = inter.get("drug_b", "").lower()
+            pair_key = (min(d_a, d_b), max(d_a, d_b), inter.get("title"))
+            if pair_key not in seen_pairs:
+                seen_pairs.add(pair_key)
+                unique_interactions.append(inter)
+
+        # Deduplicate molecular warnings
+        seen_warns = set()
+        unique_warns = []
+        for w in safety_report.get("molecular_warnings", []):
+            if w not in seen_warns:
+                seen_warns.add(w)
+                unique_warns.append(w)
+
+        safety_report["interactions"] = unique_interactions
+        safety_report["molecular_warnings"] = unique_warns
+
         # Step 3: Formulate Clinical Explanation
         explanation = self._generate_response(user_message, candidate_drugs, current_regimen, safety_report)
 
@@ -57,8 +79,8 @@ class MedGuardCopilotAgent:
             "query": user_message,
             "detected_drugs": candidate_drugs,
             "safety_status": safety_report["overall_status"],
-            "interactions": safety_report["interactions"],
-            "molecular_warnings": safety_report.get("molecular_warnings", []),
+            "interactions": unique_interactions,
+            "molecular_warnings": unique_warns,
             "assistant_reply": explanation,
             "recommended_action": "SEEK_PHYSICIAN" if safety_report["overall_status"] == "CRITICAL" else "PROCEED_WITH_CAUTION" if safety_report["overall_status"] == "HIGH" else "SAFE_TO_TAKE"
         }

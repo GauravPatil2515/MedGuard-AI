@@ -139,7 +139,7 @@ def seed_demo_data():
         conn.execute("""
             INSERT OR IGNORE INTO patients (id, name, age, diagnosis, phone)
             VALUES (?, ?, ?, ?, ?)
-        """, ('patient_mrs_kulkarni_01', 'Ms. Atharva', 68, 'Post-MI, Atrial Fibrillation, Type-2 Diabetes', '+91 98200 11223'))
+        """, ('patient_mrs_kulkarni_01', 'Mrs. Sumitra Kulkarni', 68, 'Post-MI, Atrial Fibrillation, Type-2 Diabetes', '+91 98200 11223'))
 
         # 2. Create Caregiver
         conn.execute("""

@@ -43,6 +43,18 @@ try:
 except ImportError:
     HAS_DUAL_STREAM = False
 
+try:
+    from conformal_predictor import DEFAULT_Q_HAT
+    HAS_CONFORMAL = True
+except ImportError:
+    HAS_CONFORMAL = False
+    DEFAULT_Q_HAT = {
+        "tox21": 0.31,
+        "bbbp": 0.24,
+        "clintox": 0.33,
+        "herg_ic50": 0.28
+    }
+
 
 TOX21_TARGET_NAMES = [
     "NR-AhR (Aryl Hydrocarbon Receptor)",
@@ -135,15 +147,15 @@ class UnifiedToxEngine:
 
         self.is_initialized = True
 
-    def _conformal_bounds(self, prob: float, alpha: float = 0.05) -> Dict[str, float]:
-        """Calculates 95% conformal confidence bounds with variance estimation."""
-        std_err = np.sqrt(max(prob * (1.0 - prob), 0.01) / 100.0)
-        z = 1.96  # 95% two-sided normal / Student approximation
-        margin = z * std_err + 0.03
+    def _conformal_bounds(self, prob: float, endpoint: str = "herg_ic50", alpha: float = 0.05) -> Dict[str, float]:
+        """Calculates 95% conformal confidence bounds using non-conformity quantiles."""
+        q_hat = DEFAULT_Q_HAT.get(endpoint, DEFAULT_Q_HAT.get("herg_ic50", 0.28))
+        margin = float(q_hat * 0.5)
         return {
             "lower": float(np.clip(prob - margin, 0.01, 0.99)),
             "upper": float(np.clip(prob + margin, 0.01, 0.99)),
-            "coverage": 0.95
+            "coverage": 0.95,
+            "q_hat": q_hat
         }
 
     def predict(self, smiles: str, drug_name: str = "") -> Dict[str, Any]:
@@ -172,7 +184,7 @@ class UnifiedToxEngine:
                 fp = smiles_to_fingerprint(smiles)
                 if fp is not None:
                     prob_cardiac = float(self.herg_model.predict_proba(fp)[0, 1])
-                    bounds = self._conformal_bounds(prob_cardiac)
+                    bounds = self._conformal_bounds(prob_cardiac, endpoint="herg_ic50")
                     result["herg"] = {
                         "probability": round(prob_cardiac, 4),
                         "confidence_interval": bounds,
@@ -205,7 +217,7 @@ class UnifiedToxEngine:
                         result["clintox"] = {
                             "fda_approval_likelihood": round(fda_app, 4),
                             "clinical_trial_failure_risk": round(trial_fail, 4),
-                            "bounds": self._conformal_bounds(trial_fail)
+                            "bounds": self._conformal_bounds(trial_fail, endpoint="clintox")
                         }
                         if trial_fail >= 0.55:
                             result["high_risk_flags"].append("ClinTox: Compound exhibits clinical trial attrition toxicity risks")

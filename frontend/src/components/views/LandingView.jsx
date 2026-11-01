@@ -411,7 +411,7 @@ export default function LandingView({ onNavigateTab }) {
           Ready to verify clinical safety?
         </h3>
         <p className="meta-text" style={{ maxWidth: '500px', margin: 0 }}>
-          Launch the patient intake flow for Ms. Atharva or upload a new handwritten prescription now.
+          Launch the patient intake flow for Mrs. Sumitra Kulkarni or upload a new handwritten prescription now.
         </p>
         <button
           onClick={() => onNavigateTab('dashboard')}

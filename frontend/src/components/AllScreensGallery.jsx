@@ -36,7 +36,7 @@ export default function AllScreensGallery({ onSelectScreen, onTakeDose, patientD
       isDark: false,
       component: (
         <ScreenPatientHome 
-          patientName={patientData?.patient_name || "Ms. Atharva"}
+          patientName={patientData?.patient_name || "Mrs. Sumitra Kulkarni"}
           patientAge={patientData?.age || 68}
           diagnosis={patientData?.diagnosis || "Post-CABG • Atrial Fibrillation"}
           onNavigate={(tab) => onSelectScreen(tab)}

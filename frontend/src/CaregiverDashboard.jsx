@@ -4,7 +4,8 @@ import {
   Clock, Activity, Heart, RefreshCw, FileText, ChevronRight, ShieldCheck
 } from 'lucide-react';
 
-const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+import { API_BASE } from './lib/api';
+import { subscribeToCaregiverAlerts, subscribeToPatientStatus } from './lib/firebase';
 
 export default function CaregiverDashboard({ 
   caregiverId = 'cg_rahul_01', 
@@ -17,6 +18,12 @@ export default function CaregiverDashboard({
   const [adherenceData, setAdherenceData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fdaSignals, setFdaSignals] = useState(null);
+  const [liveFirebaseAlert, setLiveFirebaseAlert] = useState(null);
+  const [liveFirebaseStatus, setLiveFirebaseStatus] = useState(null);
+  const [caregiverProfile, setCaregiverProfile] = useState({
+    name: "Rahul Kulkarni",
+    relation: "Primary Caregiver (Son)"
+  });
 
   // Fetch linked patients for this caregiver
   const fetchCaregiverData = async () => {
@@ -28,6 +35,18 @@ export default function CaregiverDashboard({
         setPatients(pList);
         if (pList.length > 0 && !selectedPatient) {
           setSelectedPatient(pList[0]);
+          // Fetch caregiver profile linked to this patient
+          fetch(`${API_BASE}/patients/${pList[0].id}/caregivers`)
+            .then(r => r.ok ? r.json() : null)
+            .then(cList => {
+              if (cList && cList.length > 0) {
+                setCaregiverProfile({
+                  name: cList[0].name || "Rahul Kulkarni",
+                  relation: `${cList[0].relation || "Primary Caregiver"}`
+                });
+              }
+            })
+            .catch(() => {});
         }
       }
     } catch (err) {
@@ -71,6 +90,35 @@ export default function CaregiverDashboard({
     loadPatientDetails();
   }, [selectedPatient]);
 
+  // Real-time Firebase Realtime Database Telemetry Listener
+  useEffect(() => {
+    if (!selectedPatient?.id) return;
+
+    // 1. Subscribe to Firebase alerts
+    const unsubAlerts = subscribeToCaregiverAlerts(selectedPatient.id, (alert) => {
+      if (alert) {
+        setLiveFirebaseAlert(alert);
+      }
+    });
+
+    // 2. Subscribe to Firebase patient live status
+    const unsubStatus = subscribeToPatientStatus(selectedPatient.id, (status) => {
+      if (status) {
+        setLiveFirebaseStatus(status);
+        // Automatically refresh patient schedule when dose action happens in Firebase
+        fetch(`${API_BASE}/patients/${selectedPatient.id}/schedule/today`)
+          .then(r => r.json())
+          .then(sched => setPatientSchedule(sched))
+          .catch(() => {});
+      }
+    });
+
+    return () => {
+      if (unsubAlerts) unsubAlerts();
+      if (unsubStatus) unsubStatus();
+    };
+  }, [selectedPatient?.id]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
@@ -97,9 +145,9 @@ export default function CaregiverDashboard({
             <Users size={28} color="#fff" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc' }}>
-                Rahul Kulkarni
+                {caregiverProfile?.name || "Authorized Caregiver"}
               </h2>
               <span style={{
                 background: 'rgba(139, 92, 246, 0.2)',
@@ -110,7 +158,7 @@ export default function CaregiverDashboard({
                 fontSize: '0.75rem',
                 fontWeight: 700
               }}>
-                Primary Caregiver (Son)
+                {caregiverProfile?.relation || "Caregiver"}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
@@ -245,7 +293,7 @@ export default function CaregiverDashboard({
       )}
 
       {/* Main Grid: Patient Selector + Patient Detailed Monitor */}
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
+      <div className="caregiver-main-grid">
         
         {/* Left Column: Authorized Patients List */}
         <div style={{

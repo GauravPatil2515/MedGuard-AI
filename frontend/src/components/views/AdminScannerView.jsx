@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Camera, RefreshCw, Download, Save, Share2, QrCode, Package, 
-  Plus, Search, Edit3, BarChart3, Users, ShieldAlert
+  Plus, Search, Edit3, BarChart3, Users, ShieldAlert, Check
 } from 'lucide-react';
 import PageHeader from '../ui/PageHeader';
 import Section from '../ui/Section';
@@ -10,7 +10,7 @@ import { saveMedicine, getAllMedicines, searchMedicines, seedDemoMedicines, getQ
 import { createMedicineQRData, generateQRCodeDataURL, generatePrintableQRSheet, parseQRData, formatMedicineForDisplay } from '../../lib/qrGenerator';
 import { runFullPipeline } from '../../lib/riskPipeline';
 
-const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+import { API_BASE } from '../../lib/api';
 
 export default function AdminScannerView({ 
   onNavigateTab,
@@ -60,13 +60,23 @@ export default function AdminScannerView({
     return () => stopCamera();
   }, []);
 
+  const dedupeMeds = (list) => {
+    const seen = new Set();
+    return (list || []).filter(m => {
+      const key = `${m.name || ''}_${m.dosage || ''}`.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const loadDatabase = async () => {
     try {
       const res = await fetch(`${API_BASE}/medicines`);
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.medicines) && data.medicines.length > 0) {
-          setMedicineDB(data.medicines);
+          setMedicineDB(dedupeMeds(data.medicines));
           return;
         }
       }
@@ -78,18 +88,16 @@ export default function AdminScannerView({
       await seedDemoMedicines();
     }
     const finalMeds = await getAllMedicines();
-    setMedicineDB(finalMeds);
+    setMedicineDB(dedupeMeds(finalMeds));
   };
-
 
   const handleSearch = async (query) => {
     setSearchQuery(query);
     if (query.length > 2) {
       const results = await searchMedicines(query);
-      setMedicineDB(results);
+      setMedicineDB(dedupeMeds(results));
     } else if (query.length === 0) {
-      const meds = await getAllMedicines();
-      setMedicineDB(meds);
+      loadDatabase();
     }
   };
 
@@ -330,12 +338,7 @@ export default function AdminScannerView({
       )}
 
       {/* Main Content Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-        gap: '24px',
-        alignItems: 'start'
-      }}>
+      <div className="admin-scanner-grid">
         
         {/* Left Column: Camera Scanner */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -420,22 +423,27 @@ export default function AdminScannerView({
           </div>
 
           {/* Medicine DB List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '340px', overflowY: 'auto', paddingRight: '4px' }}>
             {medicineDB.length > 0 ? (
-              medicineDB.map(med => (
+              medicineDB.map((med, idx) => (
                 <div
-                  key={med.id || Math.random()}
+                  key={med.id || `${med.name}_${idx}`}
                   onClick={() => handleSelectMedicine(med)}
                   className="mg-card"
                   style={{
-                    padding: '14px 16px', cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', gap: '4px',
+                    padding: '12px 16px', 
+                    cursor: 'pointer',
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '4px',
+                    minHeight: '68px',
+                    flexShrink: 0,
                     border: selectedMedicine?.id === med.id ? '2px solid var(--mg-primary)' : '1px solid var(--mg-card-border)',
                     background: selectedMedicine?.id === med.id ? 'var(--mg-primary)' : 'var(--mg-card)'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '0.95rem', color: selectedMedicine?.id === med.id ? '#ffffff' : 'var(--mg-text-main)' }}>
+                    <strong style={{ fontSize: '0.92rem', color: selectedMedicine?.id === med.id ? '#ffffff' : 'var(--mg-text-main)' }}>
                       {med.name} {med.dosage}
                     </strong>
                     <StatusBadge 
@@ -444,8 +452,8 @@ export default function AdminScannerView({
                       style={{ fontSize: '0.65rem', color: selectedMedicine?.id === med.id ? '#fff3cd' : undefined }}
                     />
                   </div>
-                  <span style={{ fontSize: '0.78rem', color: selectedMedicine?.id === med.id ? '#e2e8f0' : 'var(--mg-text-muted)' }}>
-                    {med.generic} • {med.brand} • Batch: {med.batchNumber}
+                  <span style={{ fontSize: '0.76rem', color: selectedMedicine?.id === med.id ? '#e2e8f0' : 'var(--mg-text-muted)' }}>
+                    {med.generic} • {med.brand || med.name} {med.batchNumber ? `• Batch: ${med.batchNumber}` : ''}
                   </span>
                 </div>
               ))

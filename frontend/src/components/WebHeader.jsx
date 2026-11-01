@@ -101,11 +101,11 @@ export default function WebHeader({
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            AT
+            SK
           </div>
           <div>
             <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>{patientData?.patient_name || 'Ms. Atharva'}</span>
+              <span>{patientData?.patient_name || 'Mrs. Sumitra Kulkarni'}</span>
               <span style={{ fontSize: '0.64rem', background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: '999px', fontWeight: 700 }}>
                 Active
               </span>

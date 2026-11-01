@@ -23,7 +23,7 @@ export default function ScannerStudio({
   const presets = [
     {
       id: 'mrs_kulkarni_cardiac',
-      name: 'Ms. Atharva (Cardiac)',
+      name: 'Mrs. Sumitra Kulkarni (Cardiac)',
       diagnosis: 'Post-MI, Atrial Fibrillation, Type-2 Diabetes',
       drugs: ['Warfarin 5mg', 'Metformin 500mg', 'Atorvastatin 40mg', 'Aspirin 75mg']
     },

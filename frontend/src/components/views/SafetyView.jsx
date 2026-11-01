@@ -4,7 +4,7 @@ import PageHeader from '../ui/PageHeader';
 import Section from '../ui/Section';
 import StatusBadge from '../ui/StatusBadge';
 
-const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+import { api } from '../../services/api';
 
 export default function SafetyView({ 
   patientRecord, 
@@ -61,8 +61,7 @@ export default function SafetyView({
         ? 'warfarin_bleeding_warning' 
         : 'missed_dose_warning';
       
-      const res = await fetch(`${API_BASE}/tts/audio?warning_type=${warningType}&lang=${selectedLang}`);
-      const data = await res.json();
+      const data = await api.getAudio(warningType, selectedLang);
       
       if (data.success && data.audio_base64) {
         const audio = new Audio(data.audio_base64);

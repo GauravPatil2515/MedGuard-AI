@@ -2,35 +2,35 @@ import React, { useState } from 'react';
 import { Send, Mic, Volume2, AlertTriangle, RefreshCw } from 'lucide-react';
 import PageHeader from '../ui/PageHeader';
 import StatusBadge from '../ui/StatusBadge';
+import { API_BASE as DEFAULT_API_BASE } from '../../lib/api';
 
-export default function CopilotView({ patientRecord, API_BASE = "http://localhost:5000/api" }) {
+export default function CopilotView({ patientRecord, API_BASE = DEFAULT_API_BASE }) {
+  const activeTreatments = (patientRecord?.treatments || []).filter(t => t.status === 'active');
+  const activeDrugNames = activeTreatments.map(t => `${t.drugName} ${t.dosage}`);
+
   const [messages, setMessages] = useState([
     {
       id: 1,
-      sender: 'user',
-      text: "Can I take Combiflam for headache?"
-    },
-    {
-      id: 2,
       sender: 'bot',
-      isWarning: true,
-      title: "Not Recommended with Current Regimen",
-      text: "Combiflam contains Ibuprofen (400mg) and Paracetamol (325mg). Ibuprofen is an NSAID that suppresses platelet aggregation and can erode gastric mucosal lining. When taken with Warfarin, it doubles the hazard ratio for major gastrointestinal bleeding.",
-      recommendation: "Use plain Paracetamol (500mg or 650mg) instead, which does not interfere with platelet function."
+      text: `Hello! I am your MedGuard Clinical Assistant. I am actively monitoring your prescription regimen (${activeTreatments.length} active medications on file). You can ask me any question about food timings, side effects, or drug interactions.`
     }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
-  const activeTreatments = (patientRecord?.treatments || []).filter(t => t.status === 'active');
-  const activeDrugNames = activeTreatments.map(t => `${t.drugName} ${t.dosage}`);
-
-  const quickPrompts = [
-    "Can I take Combiflam for headache?",
-    "Explain my Warfarin bleeding warning",
-    "What does OD mean in my prescription?",
-    "Why must Pantoprazole be taken before breakfast?"
-  ];
+  const quickPrompts = activeTreatments.length > 0
+    ? [
+        `Can I take Combiflam with ${activeTreatments[0]?.drugName || "my medicines"}?`,
+        `Explain my ${activeTreatments[0]?.drugName || "medication"} precautions`,
+        "What does OD and BD mean in my prescription?",
+        "What should I do if I miss a scheduled dose?"
+      ]
+    : [
+        "Can I take Combiflam for headache?",
+        "Explain my Warfarin bleeding warning",
+        "What does OD mean in my prescription?",
+        "Why must Pantoprazole be taken before breakfast?"
+      ];
 
   const handleSend = async (queryText) => {
     const q = queryText || inputValue;
@@ -129,7 +129,8 @@ export default function CopilotView({ patientRecord, API_BASE = "http://localhos
 
       {/* Chat Workspace */}
       <div className="mg-card" style={{
-        height: '560px',
+        height: 'min(600px, calc(100vh - 240px))',
+        minHeight: '440px',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden'
@@ -240,14 +241,17 @@ export default function CopilotView({ patientRecord, API_BASE = "http://localhos
         </div>
 
         {/* Quick Suggestion Pills */}
-        <div style={{
-          padding: '10px 16px',
-          background: '#ffffff',
-          borderTop: '1px solid var(--mg-border-subtle)',
-          display: 'flex',
-          gap: '8px',
-          overflowX: 'auto'
-        }}>
+        <div 
+          className="no-scrollbar"
+          style={{
+            padding: '10px 16px',
+            background: '#ffffff',
+            borderTop: '1px solid var(--mg-border-subtle)',
+            display: 'flex',
+            gap: '8px',
+            overflowX: 'auto'
+          }}
+        >
           {quickPrompts.map((prompt, idx) => (
             <button
               key={idx}

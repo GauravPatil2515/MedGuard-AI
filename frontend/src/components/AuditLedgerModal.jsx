@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Lock, ShieldCheck, RefreshCw, Key, FileCode } from 'lucide-react';
+import { API_BASE as DEFAULT_API_BASE } from '../lib/api';
 
-export default function AuditLedgerModal({ isOpen, onClose, API_BASE = "http://localhost:5000/api" }) {
+export default function AuditLedgerModal({ isOpen, onClose, API_BASE = DEFAULT_API_BASE }) {
   const [trail, setTrail] = useState([]);
   const [verification, setVerification] = useState(null);
   const [loading, setLoading] = useState(false);

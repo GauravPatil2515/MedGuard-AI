@@ -1,23 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Camera, Check, RefreshCw, ArrowRight, ShieldAlert, 
-  PlusCircle, Upload, Heart, Pill as PillIcon, QrCode
+  PlusCircle, Upload, Heart, Pill as PillIcon, QrCode, ExternalLink
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import PageHeader from '../ui/PageHeader';
 import Section from '../ui/Section';
 import StatusBadge from '../ui/StatusBadge';
-import { parseQRData, formatMedicineForDisplay, getPlainLanguageDescription, getFoodInstruction } from '../../lib/qrGenerator';
-
-const API_BASE = typeof window !== 'undefined' ? `http://${window.location.hostname}:5000/api` : "http://localhost:5000/api";
+import { parseQRData, formatMedicineForDisplay } from '../../lib/qrGenerator';
+import { api } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 let html5QrCodeScanner = null;
 
 export default function ScannerView({
-  patientRecord,
-  onAddTreatment,
   onNavigateTab
 }) {
+  const { user } = useAuth();
+  const patientId = user?.id;
+
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
   const [cameraError, setCameraError] = useState(null);
@@ -30,72 +31,54 @@ export default function ScannerView({
   const [newlyTriggeredRisk, setNewlyTriggeredRisk] = useState(null);
   const [scannedMedicine, setScannedMedicine] = useState(null);
   const [qrScanMode, setQrScanMode] = useState(false);
+  const [medicines, setMedicines] = useState([]);
+  const [qrCodeData, setQrCodeData] = useState(null);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const qrScannerRef = useRef(null);
   const qrContainerRef = useRef(null);
 
-  // Preset demo profiles for 1-tap loading
-  const presets = [
-    {
-      id: 'sunita_cardiac',
-      name: 'Cardiovascular Regimen (Atrial Fibrillation)',
-
-      icon: Heart,
-      drugs: [
-        { drugName: 'Warfarin', dosage: '5mg', frequency: 'OD (Once Daily)', timesOfDay: ['20:00'], condition: 'Atrial Fibrillation', prescribingDoctor: 'Dr. V. Sharma', criticality: 'HIGH' },
-        { drugName: 'Amiodarone', dosage: '200mg', frequency: 'OD (Once Daily)', timesOfDay: ['09:00'], condition: 'Ventricular Arrhythmia', prescribingDoctor: 'Dr. V. Sharma', criticality: 'HIGH' },
-        { drugName: 'Pantoprazole', dosage: '40mg', frequency: 'OD (Before Breakfast)', timesOfDay: ['07:30'], condition: 'Gastroprotection', prescribingDoctor: 'Dr. S. Patil', criticality: 'MEDIUM' }
-      ]
-    },
-    {
-      id: 'high_risk_clash',
-      name: 'High-Risk Clash (Warfarin + Combiflam)',
-      icon: ShieldAlert,
-      drugs: [
-        { drugName: 'Warfarin', dosage: '5mg', frequency: 'OD (Once Daily)', timesOfDay: ['20:00'], condition: 'Atrial Fibrillation', prescribingDoctor: 'Dr. V. Sharma', criticality: 'HIGH' },
-        { drugName: 'Combiflam', dosage: '400mg + 325mg', frequency: 'BD (Twice Daily)', timesOfDay: ['09:00', '21:00'], condition: 'Joint Pain', prescribingDoctor: 'Dr. M. Kulkarni', criticality: 'HIGH' }
-      ]
-    },
-    {
-      id: 'elderly_diabetic',
-      name: 'Elderly Diabetic Care (Glimepiride 2mg)',
-      icon: PillIcon,
-      drugs: [
-        { drugName: 'Glimepiride', dosage: '2mg', frequency: 'OD (Once Daily)', timesOfDay: ['08:00'], condition: 'Type 2 Diabetes', prescribingDoctor: 'Dr. R. Iyer', criticality: 'HIGH' },
-        { drugName: 'Metformin', dosage: '500mg', frequency: 'BD (Twice Daily)', timesOfDay: ['08:00', '20:00'], condition: 'Type 2 Diabetes', prescribingDoctor: 'Dr. R. Iyer', criticality: 'HIGH' }
-      ]
+  useEffect(() => {
+    if (patientId) {
+      api.getMedicines()
+        .then(res => setMedicines(res.medicines || []))
+        .catch(() => setMedicines([]));
     }
-  ];
+  }, [patientId]);
 
-  // Handle scanned QR code data
+  useEffect(() => {
+    return () => { stopCamera(); };
+  }, []);
+
   const handleQRScanSuccess = (decodedString) => {
     try {
       const qrData = parseQRData(decodedString);
       if (qrData && qrData.type === 'medicine') {
         const display = formatMedicineForDisplay(qrData);
-        setScannedMedicine(display);
-        setExtractedData({
-          drugName: display.name,
-          dosage: display.dosage,
-          frequency: 'OD (Once Daily)',
-          timesOfDay: ['09:00'],
-          condition: display.description,
-          prescribingDoctor: 'From QR Label',
-          sourceOcrConfidence: 1.0,
+        setScannedMedicine({
+          name: display.name,
+          dosage: qrData.dosage || display.dosage,
+          frequency: qrData.frequency || 'OD (Once Daily)',
+          times: qrData.times || ['09:00'],
+          condition: qrData.description || display.description,
+          prescribingDoctor: qrData.prescribingDoctor || 'From QR Label',
+          criticality: qrData.criticality || 'MEDIUM',
+          meal_timing: qrData.meal_timing || 'AFTER_FOOD',
           _qrData: qrData,
-          _allDrugs: [{ drugName: display.name, dosage: display.dosage }]
+          _medicineId: qrData.id,
         });
         setAddedSuccess(false);
         setNewlyTriggeredRisk(null);
+        stopQRScanner();
       }
     } catch (e) {
       console.warn('QR parse error:', e);
     }
   };
 
-  // Start QR code scanner
   const startQRScanner = async () => {
     if (!qrContainerRef.current) return;
     
@@ -117,11 +100,9 @@ export default function ScannerView({
         },
         (decodedText) => {
           handleQRScanSuccess(decodedText);
-          qrScannerRef.current?.clear().catch(() => {});
-          setIsCameraActive(false);
+          stopQRScanner();
         },
         (errorMessage) => {
-          // QR not found in this frame, keep scanning
         }
       );
     } catch (err) {
@@ -131,18 +112,25 @@ export default function ScannerView({
     }
   };
 
-  const stopQRScanner = () => {
+  const stopQRScanner = async () => {
     if (qrScannerRef.current) {
-      qrScannerRef.current.clear().catch(() => {});
+      const scanner = qrScannerRef.current;
       qrScannerRef.current = null;
+      try {
+        if (scanner.isScanning) {
+          await scanner.stop();
+        }
+      } catch (e) {
+        // scanner might already be stopped
+      }
+      try {
+        await scanner.clear();
+      } catch (e) {
+        // ignore if already cleared
+      }
     }
     setIsCameraActive(false);
   };
-
-  // Clean up on unmount
-  useEffect(() => {
-    return () => { stopCamera(); };
-  }, []);
 
   const startCamera = async (mode = facingMode) => {
     setCameraError(null);
@@ -214,7 +202,7 @@ export default function ScannerView({
     setNewlyTriggeredRisk(null);
 
     try {
-      // Use the backend OCR endpoint for reliable extraction
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
       const formData = new FormData();
       const blob = await fetch(imageSource).then(r => r.blob());
       formData.append('image', blob, 'prescription.jpg');
@@ -228,74 +216,72 @@ export default function ScannerView({
           drugName: primary.brand_name || primary.generic_name || 'Medication',
           dosage: primary.dosage || '1 tablet',
           frequency: primary.frequency || 'OD',
-          timesOfDay: primary.times || ['09:00'],
+          times: primary.times || ['09:00'],
           condition: primary.condition || 'As prescribed',
           prescribingDoctor: primary.doctor || 'Dr. Prescriber',
-          sourceOcrConfidence: 0.9
+          sourceOcrConfidence: 0.9,
+          _allDrugs: data.extracted_drugs
         });
         setAnalysisResult(data);
-      } else {
-        // Fallback to first preset
-        loadPreset(presets[0]);
       }
     } catch (err) {
-      console.warn("OCR error, using preset:", err);
-      loadPreset(presets[0]);
+      console.warn("OCR error:", err);
     } finally {
       setIsProcessing(false);
       setOcrProgressText('');
     }
   };
 
-  const loadPreset = (preset) => {
-    setCapturedImage(null);
-    setExtractedData({
-      drugName: preset.drugs[0].drugName,
-      dosage: preset.drugs[0].dosage,
-      frequency: preset.drugs[0].frequency,
-      timesOfDay: preset.drugs[0].timesOfDay,
-      condition: preset.drugs[0].condition,
-      prescribingDoctor: preset.drugs[0].prescribingDoctor,
-      sourceOcrConfidence: 0.95,
-      _allDrugs: preset.drugs
-    });
-    setAnalysisResult({ interactions: [] });
+  const handleCommitTreatment = async () => {
+    if (!scannedMedicine || !patientId) return;
+
+    setSaving(true);
+    try {
+      await api.createSchedule({
+        patient_id: patientId,
+        drug_name: scannedMedicine.name,
+        generic_name: scannedMedicine._qrData?.generic,
+        dosage: scannedMedicine.dosage,
+        frequency: scannedMedicine.frequency.replace(/ .*/, ''),
+        meal_timing: scannedMedicine.meal_timing,
+        criticality: scannedMedicine.criticality,
+      });
+
+      const res = await api.getMedicines();
+      setMedicines(res.medicines || []);
+      setAddedSuccess(true);
+    } catch (err) {
+      console.error('Failed to add medicine:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleCommitTreatment = async () => {
-    if (!extractedData || !onAddTreatment) return;
-
-    // Add all drugs from preset if available
-    const drugsToAdd = extractedData._allDrugs || [extractedData];
-    
-    for (const drug of drugsToAdd) {
-      const updated = await onAddTreatment(drug);
-      if (updated) {
-        const activeDrugLower = drug.drugName.toLowerCase();
-        const detectedRisks = (updated.riskEvents || []).filter(r => 
-          r.drugPair.some(dp => dp.toLowerCase() === activeDrugLower)
-        );
-        if (detectedRisks.length > 0) {
-          setNewlyTriggeredRisk(detectedRisks[0]);
-        }
-      }
+  const handleGenerateQR = async (medicineId) => {
+    try {
+      const res = await api.generateQR(medicineId);
+      setQrCodeData(res);
+      setQrModalOpen(true);
+    } catch (err) {
+      console.error('QR generation failed:', err);
     }
-    setAddedSuccess(true);
+  };
+
+  const handleCloseQRModal = () => {
+    setQrModalOpen(false);
+    setQrCodeData(null);
   };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* Page Header */}
       <PageHeader
         title="Scan Bottle"
-        subtitle="Point camera at SAFE CAP⁺ QR code or choose a demo profile"
+        subtitle="Point camera at SAFE CAP⁺ QR code or capture a prescription label"
       />
 
-      {/* Main Content */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-        {/* Camera Viewfinder - Large and Prominent */}
         <div style={{
           position: 'relative',
           width: '100%',
@@ -310,7 +296,6 @@ export default function ScannerView({
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)'
         }}>
           
-          {/* Live Video Stream */}
           {isCameraActive && (
             <video
               ref={videoRef}
@@ -321,7 +306,6 @@ export default function ScannerView({
             />
           )}
 
-          {/* QR Code Scanner Container */}
           {qrScanMode && isCameraActive && (
             <div id="qr-reader" ref={qrContainerRef} style={{ 
               width: '100%', height: '100%',
@@ -329,7 +313,6 @@ export default function ScannerView({
             }} />
           )}
 
-          {/* Captured Image Preview */}
           {!isCameraActive && capturedImage && (
             <img
               src={capturedImage}
@@ -338,7 +321,6 @@ export default function ScannerView({
             />
           )}
 
-          {/* Idle Viewfinder */}
           {!isCameraActive && !capturedImage && !extractedData && !scannedMedicine && (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px',
@@ -363,7 +345,6 @@ export default function ScannerView({
             </div>
           )}
 
-          {/* Camera Overlay Guide */}
           {isCameraActive && (
             <div style={{
               position: 'absolute', inset: 0, pointerEvents: 'none',
@@ -389,7 +370,6 @@ export default function ScannerView({
             </div>
           )}
 
-          {/* Processing Overlay */}
           {isProcessing && (
             <div style={{
               position: 'absolute', inset: 0,
@@ -408,7 +388,6 @@ export default function ScannerView({
 
         </div>
 
-        {/* Camera Error */}
         {cameraError && (
           <div style={{
             padding: '12px 16px', background: '#fee2e2', color: '#991b1b',
@@ -420,13 +399,11 @@ export default function ScannerView({
           </div>
         )}
 
-        {/* Camera Controls - Only when no data extracted */}
         {!extractedData && !scannedMedicine && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {/* QR Scan Button - Primary Action */}
             <button
               onClick={() => { setQrScanMode(true); startQRScanner(); }}
-              disabled={isProcessing}
+              disabled={isProcessing || saving}
               className="btn-primary"
               style={{ 
                 width: '100%', padding: '18px 24px', fontSize: '1.2rem', fontWeight: 700, 
@@ -438,12 +415,11 @@ export default function ScannerView({
               <span>Scan Medicine Bottle QR Code</span>
             </button>
             
-            {/* Secondary: Camera + Upload Row */}
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               {!isCameraActive ? (
                 <button
                   onClick={() => { setQrScanMode(false); startCamera(); }}
-                  disabled={isProcessing}
+                  disabled={isProcessing || saving}
                   className="btn-secondary"
                   style={{ flex: 1, minWidth: '160px', padding: '14px 20px', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
                 >
@@ -477,77 +453,25 @@ export default function ScannerView({
           </div>
         )}
 
-        {/* Demo Preset Buttons - 1-Tap Loading */}
-        {!extractedData && !isCameraActive && !capturedImage && (
-          <Section title="Quick Demo Profiles" subtitle="Tap to instantly load a sample prescription">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
-              {presets.map(preset => {
-                const Icon = preset.icon;
-                return (
-                  <button
-                    key={preset.id}
-                    onClick={() => loadPreset(preset)}
-                    className="mg-card"
-                    style={{
-                      padding: '16px 20px', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '16px',
-                      textAlign: 'left', border: '2px solid var(--mg-card-border)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--mg-primary)'}
-                    onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--mg-card-border)'}
-                  >
-                    <div style={{
-                      width: '48px', height: '48px', borderRadius: 'var(--radius-lg)',
-                      background: 'var(--mg-primary)', color: '#ffffff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0
-                    }}>
-                      <Icon size={22} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--mg-text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {preset.name}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--mg-text-muted)', marginTop: '2px' }}>
-                        {preset.drugs.length} medication{preset.drugs.length > 1 ? 's' : ''}
-                      </div>
-                    </div>
-                    <ArrowRight size={20} color="var(--mg-text-muted)" />
-                  </button>
-                );
-              })}
-            </div>
-          </Section>
-        )}
-
-        {/* Extracted Data Review & Confirmation */}
-        {extractedData && (
+        {scannedMedicine && (
           <Section 
             title="Medication Found" 
             subtitle={addedSuccess ? "Added to your regimen" : "Review and add to your daily pills"}
           >
             <div className="mg-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
-              {/* Drug Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
                   <span className="meta-text" style={{ display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.7rem' }}>
                     Detected Medication
                   </span>
                   <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--mg-text-main)' }}>
-                    {extractedData.drugName}
+                    {scannedMedicine.name}
                   </h3>
-                  {extractedData._allDrugs && extractedData._allDrugs.length > 1 && (
-                    <div style={{ marginTop: '4px', fontSize: '0.85rem', color: 'var(--mg-text-muted)' }}>
-                      + {extractedData._allDrugs.length - 1} more medication{extractedData._allDrugs.length > 2 ? 's' : ''}
-                    </div>
-                  )}
                 </div>
-                <StatusBadge type="success" label={`${Math.round(extractedData.sourceOcrConfidence * 100)}% Confident`} />
+                <StatusBadge type="success" label="Verified" />
               </div>
 
-              {/* Key Details Grid */}
               <div style={{
                 display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
                 gap: '12px', background: 'var(--mg-card-subtle)',
@@ -556,77 +480,56 @@ export default function ScannerView({
                 <div>
                   <label className="meta-text" style={{ display: 'block', marginBottom: '4px' }}>Dosage</label>
                   <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--mg-text-main)' }}>
-                    {extractedData.dosage}
+                    {scannedMedicine.dosage}
                   </div>
                 </div>
                 <div>
                   <label className="meta-text" style={{ display: 'block', marginBottom: '4px' }}>When</label>
                   <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--mg-text-main)' }}>
-                    {extractedData.timesOfDay[0]}
+                    {scannedMedicine.times?.[0] || '09:00'}
                   </div>
                 </div>
                 <div>
                   <label className="meta-text" style={{ display: 'block', marginBottom: '4px' }}>Frequency</label>
                   <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--mg-text-body)' }}>
-                    {extractedData.frequency}
+                    {scannedMedicine.frequency}
                   </div>
                 </div>
                 <div>
-                  <label className="meta-text" style={{ display: 'block', marginBottom: '4px' }}>Doctor</label>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--mg-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {extractedData.prescribingDoctor}
+                  <label className="meta-text" style={{ display: 'block', marginBottom: '4px' }}>Criticality</label>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mg-text-muted)' }}>
+                    {scannedMedicine.criticality}
                   </div>
                 </div>
               </div>
 
-              {/* Safety Clash Alert after adding */}
               {addedSuccess && (
                 <div style={{
                   padding: '16px', borderRadius: 'var(--radius-lg)',
-                  background: newlyTriggeredRisk ? 'var(--mg-danger-soft)' : 'var(--mg-success-soft)',
-                  border: newlyTriggeredRisk ? '2px solid var(--mg-danger-border)' : '2px solid var(--mg-accent-border)'
+                  background: 'var(--mg-success-soft)',
+                  border: '2px solid var(--mg-accent-border)'
                 }}>
-                  {newlyTriggeredRisk ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991b1b', fontWeight: 700, fontSize: '0.95rem' }}>
-                        <ShieldAlert size={20} />
-                        <span>⚠️ Safety Alert: Dangerous Combination Detected</span>
-                      </div>
-                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#b91c1c', lineHeight: 1.5 }}>
-                        <strong>{newlyTriggeredRisk.drugPair.join(' + ')}</strong>: {newlyTriggeredRisk.description}
-                      </p>
-                      <button
-                        onClick={() => onNavigateTab && onNavigateTab('caregiver')}
-                        className="btn-primary"
-                        style={{ alignSelf: 'flex-start', padding: '10px 18px', fontSize: '0.9rem' }}
-                      >
-                        View Safety Details
-                        <ArrowRight size={14} />
-                      </button>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--mg-accent)', fontWeight: 600, fontSize: '1rem' }}>
+                      <Check size={24} />
+                      <span>Added successfully!</span>
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--mg-accent)', fontWeight: 600, fontSize: '1rem' }}>
-                        <Check size={24} />
-                        <span>Added successfully! No safety clashes found.</span>
-                      </div>
-                      <button
-                        onClick={() => { onNavigateTab && onNavigateTab('home'); setAddedSuccess(false); setExtractedData(null); }}
-                        className="btn-secondary"
-                        style={{ padding: '10px 18px', fontSize: '0.9rem' }}
-                      >
-                        Go to Today's Pills
-                        <ArrowRight size={14} />
-                      </button>
-                    </div>
-                  )}
+                    <button
+                      onClick={() => { onNavigateTab && onNavigateTab('home'); setAddedSuccess(false); setScannedMedicine(null); }}
+                      className="btn-secondary"
+                      style={{ padding: '10px 18px', fontSize: '0.9rem' }}
+                    >
+                      Go to Today's Pills
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Commit Button */}
               {!addedSuccess && (
                 <button
                   onClick={handleCommitTreatment}
+                  disabled={saving}
                   className="btn-primary"
                   style={{ 
                     padding: '16px 24px', fontSize: '1.1rem', fontWeight: 700,
@@ -634,8 +537,17 @@ export default function ScannerView({
                     boxShadow: '0 4px 20px rgba(13, 56, 44, 0.3)'
                   }}
                 >
-                  <PlusCircle size={22} />
-                  <span>Add to My Daily Pills & Check Safety</span>
+                  {saving ? (
+                    <>
+                      <RefreshCw size={20} className="animate-spin" />
+                      <span>Adding to regimen...</span>
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle size={22} />
+                      <span>Add to My Daily Pills</span>
+                    </>
+                  )}
                 </button>
               )}
 
@@ -643,7 +555,71 @@ export default function ScannerView({
           </Section>
         )}
 
+        {medicines.length > 0 && !scannedMedicine && !extractedData && (
+          <Section title="Your Medicines" style={{ marginTop: '0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+              {medicines.map(med => (
+                <div key={med.id} className="mg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--mg-text-main)' }}>{med.name}</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--mg-text-muted)' }}>{med.dosage} • {med.frequency}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--mg-text-muted)' }}>{med.times?.[0] || ''}</div>
+                  <button
+                    onClick={() => handleGenerateQR(med.id)}
+                    className="btn-ghost"
+                    style={{ padding: '8px 12px', fontSize: '0.85rem', alignSelf: 'flex-start' }}
+                  >
+                    <QrCode size={16} />
+                    <span>View QR Label</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
       </div>
+
+      {qrModalOpen && qrCodeData && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '40px'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: 'var(--radius-xl)', padding: '32px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px',
+            maxWidth: '400px', width: '100%'
+          }}>
+            <img src={qrCodeData.qr_code} alt="QR Code" style={{ width: '200px', height: '200px' }} />
+            <div style={{ fontWeight: 700, color: 'var(--mg-text-main)' }}>
+              {qrCodeData.qr_data?.name || 'Medicine Label'}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--mg-text-muted)' }}>
+              {qrCodeData.qr_data?.dosage} • {qrCodeData.qr_data?.frequency}
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={handleCloseQRModal} className="btn-secondary" style={{ flex: 1 }}>
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = qrCodeData.qr_code;
+                  link.download = 'medicine-qr.png';
+                  link.click();
+                }}
+                className="btn-primary"
+                style={{ flex: 1 }}
+              >
+                <ExternalLink size={16} />
+                <span>Download</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
