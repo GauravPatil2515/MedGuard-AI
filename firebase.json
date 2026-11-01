@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "safecap-medguard",
     "public": "frontend/dist",
     "ignore": [
       "firebase.json",

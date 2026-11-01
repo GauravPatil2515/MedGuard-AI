@@ -37,5 +37,5 @@ build/
 # LaTeX Auxiliaries
 *.aux
 *.out
-*.log
-
+# Firebase cache
+.firebase/
